@@ -1,6 +1,6 @@
 {
   "name": "@nath-vikky/dsh-fisher",
-  "version": "0.1.0-dev.2",
+  "version": "0.1.0-dev.3",
   "description": "A cozy fishing companion for DeepSeek Harness Web",
   "private": true,
   "type": "module",
@@ -12,10 +12,11 @@
     "./client": "./lib/client.js",
     "./package.json": "./package.json"
   },
-  "files": ["lib/*.js", "assets/runtime/coast-pixel-ink-v1.png", "cordis.patch.yml", "README.md"],
+  "files": ["lib/*.js", "assets/runtime/*.png", "cordis.patch.yml", "README.md"],
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsdown",
+    "test": "node --experimental-strip-types --test tests/*.test.mts",
     "check": "pnpm typecheck && pnpm build"
   },
   "dsh": {

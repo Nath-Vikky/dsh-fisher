@@ -1,11 +1,11 @@
-import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Context } from '@deepseek-ai/cordis';
 import type { HostConnectionHandle } from '@deepseek-ai/dsh-client-connection';
 import type { WebServer } from '@deepseek-ai/dsh-host-webserver';
-import { API, COAST_ASSET, VERSION } from './protocol.ts';
-import type { Bootstrap } from './protocol.ts';
+import { API, COAST_ASSET } from './protocol.ts';
+import { SPECIES, spriteName } from './game/content.ts';
+import { ActionError, FisherService } from './host/service.ts';
 
 export const name = 'dsh-fisher';
 export const inject = ['webServer', 'connection'];
@@ -18,9 +18,10 @@ export function apply(ctx: HostContext): void {
   }
 
   ctx.effect(() => {
-    const snapshot: Bootstrap = {
-      protocolVersion: 1, version: VERSION, generation: randomUUID(), revision: 0, gameplayAvailable: false,
-    };
+    const service = new FisherService();
+    const ready = service.initialize();
+    // Keep initialization rejection handled even when the UI is never opened.
+    void ready.catch(() => {});
     const streams = new Map<ServerResponse, IncomingMessage>();
     let heartbeat: ReturnType<typeof setInterval> | undefined;
     let disposed = false;
@@ -30,6 +31,22 @@ export function apply(ctx: HostContext): void {
       [COAST_ASSET, { file: new URL('../assets/runtime/coast-pixel-ink-v1.png', import.meta.url),
         contentType: 'image/png', cacheControl: 'private, max-age=604800, immutable' }],
     ]);
+    for (const entry of SPECIES) {
+      const filename = spriteName(entry.id);
+      assets.set(`${API}/assets/${filename}`, { file: new URL(`../assets/runtime/${filename}`, import.meta.url),
+        contentType: 'image/png', cacheControl: 'private, max-age=604800, immutable' });
+    }
+    const revisionEvent = () => {
+      const state = service.snapshot();
+      return `event: revision\ndata: ${JSON.stringify({ generation: state.generation, revision: state.revision, gameplayAvailable: state.gameplayAvailable })}\n\n`;
+    };
+    const unsubscribe = service.subscribe(() => {
+      for (const [stream, request] of streams) {
+        if (ctx.connection.requestRejection(request) !== undefined || stream.destroyed || !stream.write(revisionEvent())) {
+          stream.end(); streams.delete(stream);
+        }
+      }
+    });
 
     const stopHeartbeat = () => {
       if (heartbeat !== undefined) clearInterval(heartbeat);
@@ -40,6 +57,8 @@ export function apply(ctx: HostContext): void {
       stopHeartbeat();
       for (const response of streams.keys()) response.end();
       streams.clear();
+      unsubscribe();
+      void ready.catch(() => {}).then(() => service.close());
     };
     const json = (response: ServerResponse, status: number, body: unknown) => {
       response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
@@ -56,15 +75,36 @@ export function apply(ctx: HostContext): void {
         }
         if (disposed) { json(response, 503, { error: 'UNAVAILABLE' }); return; }
         const pathname = new URL(request.url ?? '/', 'http://localhost').pathname;
-        const known = [`${API}/bootstrap`, `${API}/state`, `${API}/events`];
+        const known = [`${API}/bootstrap`, `${API}/state`, `${API}/events`, `${API}/actions`, `${API}/cast-input`];
         if (!known.includes(pathname) && !assets.has(pathname)) { json(response, 404, { error: 'NOT_FOUND' }); return; }
-        if (request.method !== 'GET') {
-          response.setHeader('Allow', 'GET');
+        const mutation = pathname === `${API}/actions` || pathname === `${API}/cast-input`;
+        if (request.method !== (mutation ? 'POST' : 'GET')) {
+          response.setHeader('Allow', mutation ? 'POST' : 'GET');
           json(response, 405, { error: 'METHOD_NOT_ALLOWED' });
           return;
         }
+        if (mutation || !assets.has(pathname)) {
+          try { await ready; }
+          catch { json(response, 503, { error: '存档暂时无法打开，请检查目录权限后重启插件' }); return; }
+          if (disposed) { json(response, 503, { error: 'UNAVAILABLE' }); return; }
+        }
+        if (mutation) {
+          try {
+            if (!request.headers['content-type']?.toLowerCase().startsWith('application/json')) throw new ActionError('请使用 JSON 请求', 415);
+            const limit = pathname.endsWith('/cast-input') ? 65536 : 32768;
+            if (Number(request.headers['content-length'] ?? 0) > limit) throw new ActionError('请求过大', 413);
+            const body = await readJson(request, limit);
+            if (disposed) throw new ActionError('插件已停止', 503);
+            const result = await service.mutate(body, pathname.endsWith('/cast-input'));
+            json(response, 200, result);
+          } catch (error) {
+            if (!response.destroyed) json(response, error instanceof ActionError ? error.status : 400,
+              { error: error instanceof ActionError ? error.message : '请求内容不正确', snapshot: service.snapshot() });
+          }
+          return;
+        }
         if (pathname === `${API}/bootstrap` || pathname === `${API}/state`) {
-          json(response, 200, snapshot);
+          json(response, 200, service.snapshot());
           return;
         }
         const asset = assets.get(pathname);
@@ -90,7 +130,7 @@ export function apply(ctx: HostContext): void {
           'Cache-Control': 'no-store, no-transform', 'X-Accel-Buffering': 'no',
         });
         response.flushHeaders();
-        if (!response.write(`event: snapshot\ndata: ${JSON.stringify(snapshot)}\n\n`)) {
+        if (!response.write(revisionEvent())) {
           response.end();
           return;
         }
@@ -116,4 +156,29 @@ export function apply(ctx: HostContext): void {
     });
     return () => { close(); unregister(); };
   }, 'dsh-fisher: authenticated routes');
+}
+
+async function readJson(request: IncomingMessage, limit: number): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const parts: Buffer[] = [];
+    let bytes = 0;
+    const cleanup = () => {
+      clearTimeout(timer); request.removeListener('data', data); request.removeListener('end', end);
+      request.removeListener('error', fail); request.removeListener('aborted', aborted);
+    };
+    const fail = (error: Error) => { cleanup(); request.resume(); reject(error); };
+    const aborted = () => fail(new ActionError('请求已中断', 400));
+    const data = (part: Buffer) => {
+      bytes += part.length;
+      if (bytes > limit) fail(new ActionError('请求过大', 413));
+      else parts.push(part);
+    };
+    const end = () => {
+      cleanup();
+      try { resolve(JSON.parse(Buffer.concat(parts).toString('utf8'))); }
+      catch { reject(new ActionError('JSON 格式不正确', 400)); }
+    };
+    const timer = setTimeout(() => fail(new ActionError('请求超时', 408)), 10000);
+    request.on('data', data); request.once('end', end); request.once('error', fail); request.once('aborted', aborted);
+  });
 }
