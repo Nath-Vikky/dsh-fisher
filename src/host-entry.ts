@@ -4,11 +4,14 @@ import type { Context } from '@deepseek-ai/cordis';
 import type { HostConnectionHandle } from '@deepseek-ai/dsh-client-connection';
 import type { WebServer } from '@deepseek-ai/dsh-host-webserver';
 import type { SessionStore } from '@deepseek-ai/dsh-session';
-import { API, COAST_ASSET } from './protocol.ts';
+import { API } from './protocol.ts';
 import { SPRITES } from './game/content.ts';
 import { GEAR_ART } from './game/gear.ts';
+import { imageContentType,thumbnailAsset } from './game/art.ts';
+import { SCENE_ART,visualIllustrations } from './game/visuals.ts';
 import { ActionError, FisherService, workClock } from './host/service.ts';
 import { WorkAdapter } from './host/work-adapter.ts';
+import { MAX_SAVE_BYTES } from './host/save-codec.ts';
 
 export const name = 'dsh-fisher';
 export const inject = ['webServer', 'connection', 'sessions'];
@@ -45,12 +48,11 @@ export function apply(ctx: HostContext): void {
     const assets = new Map<string, { file: URL; contentType: string; cacheControl: string; buffer?: Promise<Buffer> }>([
       [`${API}/client/game.js`, { file: new URL('./game.js', import.meta.url),
         contentType: 'text/javascript; charset=utf-8', cacheControl: 'no-store' }],
-      [COAST_ASSET, { file: new URL('../assets/runtime/coast-pixel-ink-v1.png', import.meta.url),
-        contentType: 'image/png', cacheControl: 'private, max-age=604800, immutable' }],
     ]);
-    for (const filename of new Set([...Object.values(SPRITES).flatMap(variants=>Object.values(variants)),...Object.values(GEAR_ART)])) {
+    const illustrations=[...Object.values(SPRITES).flatMap(variants=>Object.values(variants)),...Object.values(GEAR_ART),...visualIllustrations()];
+    for (const filename of new Set([...illustrations.flatMap(file=>[file,thumbnailAsset(file)]),...Object.values(SCENE_ART)])) {
       assets.set(`${API}/assets/${filename}`, { file: new URL(`../assets/runtime/${filename}`, import.meta.url),
-        contentType: 'image/png', cacheControl: 'private, max-age=604800, immutable' });
+        contentType: imageContentType(filename), cacheControl: 'private, max-age=604800, immutable' });
     }
     const revisionEvent = () => {
       const state = service.snapshot();
@@ -93,9 +95,10 @@ export function apply(ctx: HostContext): void {
         }
         if (disposed) { json(response, 503, { error: 'UNAVAILABLE' }); return; }
         const pathname = new URL(request.url ?? '/', 'http://localhost').pathname;
-        const known = [`${API}/bootstrap`, `${API}/state`, `${API}/events`, `${API}/actions`, `${API}/cast-input`];
+        const known = [`${API}/bootstrap`, `${API}/state`, `${API}/events`, `${API}/actions`, `${API}/cast-input`,`${API}/save/preview`,`${API}/save/export`];
         if (!known.includes(pathname) && !assets.has(pathname)) { json(response, 404, { error: 'NOT_FOUND' }); return; }
-        const mutation = pathname === `${API}/actions` || pathname === `${API}/cast-input`;
+        const preview=pathname===`${API}/save/preview`;
+        const mutation = pathname === `${API}/actions` || pathname === `${API}/cast-input` || preview;
         if (request.method !== (mutation ? 'POST' : 'GET')) {
           response.setHeader('Allow', mutation ? 'POST' : 'GET');
           json(response, 405, { error: 'METHOD_NOT_ALLOWED' });
@@ -109,16 +112,25 @@ export function apply(ctx: HostContext): void {
         if (mutation) {
           try {
             if (!request.headers['content-type']?.toLowerCase().startsWith('application/json')) throw new ActionError('请使用 JSON 请求', 415);
-            const limit = pathname.endsWith('/cast-input') ? 65536 : 32768;
+            const limit = preview?MAX_SAVE_BYTES*2+4096:pathname.endsWith('/cast-input') ? 65536 : 32768;
             if (Number(request.headers['content-length'] ?? 0) > limit) throw new ActionError('请求过大', 413);
             const body = await readJson(request, limit);
             if (disposed) throw new ActionError('插件已停止', 503);
+            if(preview){json(response,200,await service.previewSave(body));return;}
             const result = await service.mutate(body, pathname.endsWith('/cast-input'));
             json(response, 200, result);
           } catch (error) {
             if (!response.destroyed) json(response, error instanceof ActionError ? error.status : 400,
               { error: error instanceof ActionError ? error.message : '请求内容不正确', snapshot: service.snapshot() });
           }
+          return;
+        }
+        if(pathname===`${API}/save/export`) {
+          try {
+            const body=await service.exportSave();
+            if(disposed||response.destroyed)return;
+            response.writeHead(200,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Content-Disposition':'attachment; filename="dsh-fisher-save.json"','X-Content-Type-Options':'nosniff'});response.end(body);
+          } catch {json(response,503,{error:'暂时无法导出，请稍后重试；原文件没有修改'});}
           return;
         }
         if (pathname === `${API}/bootstrap` || pathname === `${API}/state`) {

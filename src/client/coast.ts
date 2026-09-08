@@ -1,3 +1,8 @@
+export function coastPoint(image:HTMLImageElement,width:number,height:number,x:number,y:number):{x:number;y:number} {
+  const scale=Math.max(width/image.naturalWidth,height/image.naturalHeight);
+  return {x:(x*image.naturalWidth-(image.naturalWidth-width/scale)/2)*scale,
+    y:(y*image.naturalHeight-(image.naturalHeight-height/scale)*.6)*scale};
+}
 export function drawCoast(
   ctx: CanvasRenderingContext2D, width: number, height: number, time: number, image?: HTMLImageElement,
 ): void {

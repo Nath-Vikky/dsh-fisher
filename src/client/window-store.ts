@@ -5,6 +5,13 @@ export interface WindowState {
   width: number;
   height: number;
   lowPerformance: boolean;
+  theme: 'system'|'light'|'dark';
+  fontSize: 14|16|18;
+  reducedMotion: boolean;
+  sound: boolean;
+  volume: number;
+  aspectLocked: boolean;
+  aspectRatio: number;
 }
 
 const KEY = 'dsh-fisher:window:v1';
@@ -24,7 +31,8 @@ export function createWindowStore() {
     };
   };
   let state: WindowState = fit({ open: false, width: 420, height: 720,
-    x: window.innerWidth - 444, y: window.innerHeight - 800, lowPerformance: false });
+    x: window.innerWidth - 444, y: window.innerHeight - 800, lowPerformance: false,
+    theme:'system',fontSize:14,reducedMotion:false,sound:false,volume:.35,aspectLocked:true,aspectRatio:420/720 });
   try {
     const saved: unknown = JSON.parse(localStorage.getItem(KEY) ?? 'null');
     if (saved !== null && typeof saved === 'object') {
@@ -32,14 +40,21 @@ export function createWindowStore() {
       const numeric = (key: 'x' | 'y' | 'width' | 'height') =>
         typeof row[key] === 'number' && Number.isFinite(row[key]) ? row[key] : state[key];
       state = fit({ ...state, x: numeric('x'), y: numeric('y'), width: numeric('width'), height: numeric('height'),
-        lowPerformance: row.lowPerformance === true });
+        lowPerformance: row.lowPerformance === true,theme:row.theme==='light'||row.theme==='dark'?row.theme:'system',
+        fontSize:row.fontSize===16||row.fontSize===18?row.fontSize:14,reducedMotion:row.reducedMotion===true,sound:row.sound===true,
+        volume:typeof row.volume==='number'&&Number.isFinite(row.volume)?clamp(row.volume,0,1):.35,
+        aspectLocked:row.aspectLocked!==false,aspectRatio:typeof row.aspectRatio==='number'&&row.aspectRatio>=.3&&row.aspectRatio<=3?row.aspectRatio:420/720 });
+      if(typeof row.relativeX==='number'&&typeof row.relativeY==='number'&&Number.isFinite(row.relativeX)&&Number.isFinite(row.relativeY))state=fit({...state,
+        x:8+clamp(row.relativeX,0,1)*Math.max(0,window.innerWidth-state.width-16),
+        y:8+clamp(row.relativeY,0,1)*Math.max(0,window.innerHeight-state.height-16)});
     }
   } catch { /* Device preferences are optional. */ }
 
   const persist = () => {
     try {
       const { open: _open, ...saved } = state;
-      localStorage.setItem(KEY, JSON.stringify(saved));
+      localStorage.setItem(KEY, JSON.stringify({...saved,
+        relativeX:(state.x-8)/Math.max(1,window.innerWidth-state.width-16),relativeY:(state.y-8)/Math.max(1,window.innerHeight-state.height-16)}));
     } catch { /* A blocked or full storage area must not prevent opening the panel. */ }
   };
   const set = (patch: Partial<WindowState>, save = false) => {
@@ -49,15 +64,28 @@ export function createWindowStore() {
     if (save) persist();
     for (const listener of listeners) listener();
   };
-  const reset = () => set({ width: 420, height: 720, x: window.innerWidth - 444, y: window.innerHeight - 800 }, true);
-  const resize = () => set({}, true);
+  const reset = () => set({ width: 420, height: 720,aspectRatio:420/720, x: window.innerWidth - 444, y: window.innerHeight - 800 }, true);
+  let viewportWidth=window.innerWidth,viewportHeight=window.innerHeight;
+  const resize = () => {
+    const relativeX=(state.x-8)/Math.max(1,viewportWidth-state.width-16),relativeY=(state.y-8)/Math.max(1,viewportHeight-state.height-16);
+    const fitted=fit(state);viewportWidth=window.innerWidth;viewportHeight=window.innerHeight;
+    set({x:8+relativeX*Math.max(0,viewportWidth-fitted.width-16),y:8+relativeY*Math.max(0,viewportHeight-fitted.height-16)},true);
+  };
+  const resizeTo=(width:number,height:number,save=false) => {
+    if(state.aspectLocked) {
+      if(Math.abs((width-state.width)/state.width)>=Math.abs((height-state.height)/state.height))height=width/state.aspectRatio;
+      else width=height*state.aspectRatio;
+    }
+    set({width,height},save);
+  };
   window.addEventListener('resize', resize);
 
   return {
     getSnapshot: () => state,
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
-    set, persist, reset,
-    preset(name: keyof typeof presets) { const [width, height] = presets[name]; set({ width, height }, true); },
+    set, persist, reset,resizeTo,
+    dock(side:'left'|'right') {set({x:side==='left'?8:window.innerWidth-state.width-8},true);},
+    preset(name: keyof typeof presets) { const [width, height] = presets[name]; set({ width, height,aspectRatio:width/height }, true); },
     dispose() { window.removeEventListener('resize', resize); listeners.clear(); },
   };
 }

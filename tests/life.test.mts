@@ -146,7 +146,7 @@ test('format three migration preserves an in-flight guest, supplies and source b
   const selected=rollEncounter(61,'old-invitation','assisted',save.journey,[]);save.journey.invitations=[];
   save.active={id:'old-invitation',owner:'life-test',ownerEpoch:1,leaseUntil:Date.now()+15000,castRevision:0,inputCursor:0,paused:true,seed:61,
     catch:selected.catch,challenge:selected.challenge,meta:selected.meta,simulation:initialSimulation()};
-  const old=save as unknown as Record<string,unknown>;old.formatVersion=3;delete old.life;
+  const old=save as unknown as Record<string,unknown>;old.formatVersion=3;old.contentVersion=2;delete old.life;
   const original=checksum(old);await writeFile(join(directory,'save.json'),original);const service=new FisherService(new SaveStore(directory));
   try {
     await service.initialize();assert.equal(service.snapshot().gameplayAvailable,true);assert.equal(service.snapshot().life.guests.G001.invitationEarned,true);

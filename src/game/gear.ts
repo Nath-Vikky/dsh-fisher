@@ -1,6 +1,13 @@
 export const GEAR_IDS = ['D01','D02','D03','D04','D05','D06','N01','N02','N03','N04','U01','U02','U03','U04'] as const;
 export type GearId = typeof GEAR_IDS[number];
-export const GEAR_ART: Partial<Record<GearId,string>> = {D01:'d01-pixel-v4.png'};
+export const GEAR_ART: Record<GearId,string> = {
+  D01:'d01-v4.webp',D02:'d02-softrod-pixel-v1.webp',D03:'d03-quickrod-pixel-v1.webp',
+  D04:'d04-deeprod-pixel-v1.webp',D05:'d05-tiderod-pixel-v1.webp',D06:'d06-relaxrod-pixel-v2.webp',
+  N01:'n01-plainline-pixel-v1.webp',N02:'n02-elasticline-pixel-v1.webp',
+  N03:'n03-saltline-pixel-v1.webp',N04:'n04-smoothline-pixel-v1.webp',
+  U01:'u01-whitefloat-pixel-v1.webp',U02:'u02-shellfloat-pixel-v2.webp',
+  U03:'u03-glowfloat-pixel-v1.webp',U04:'u04-recordfloat-pixel-v1.webp',
+};
 export type GearSlot = 'rod' | 'line' | 'float';
 export interface Gear { id: GearId; name: string; slot: GearSlot; price: number; level: number; description: string }
 export const GEAR: readonly Gear[] = [

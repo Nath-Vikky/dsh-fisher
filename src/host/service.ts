@@ -8,10 +8,11 @@ import { rollEncounter } from '../game/encounters.ts';
 import { gear, isGearId } from '../game/gear.ts';
 import { bait, consumeOverride, finishTide, isBaitId, isInventorySpecies, isTide, levelInfo, regionUnlocked } from '../game/progression.ts';
 import { VERSION } from '../protocol.ts';
-import type { ActionRequest, Bootstrap, Envelope, InputRequest, MutationResult } from '../protocol.ts';
+import type { ActionRequest, Bootstrap, Envelope, InputRequest, MutationResult,SavePreview } from '../protocol.ts';
 import { emptySave, id, integer, object, validateSave } from './model.ts';
 import type { PrivateCast, Save } from './model.ts';
 import { SaveStore } from './store.ts';
+import { decodeSave,encodeSave } from './save-codec.ts';
 import { SUPPLY_BAITS, workView } from '../game/work.ts';
 import { emptyWorkRuntime, observeWork, settleWork } from './work-runtime.ts';
 import type { WorkEvent, WorkRuntime, WorkTime } from './work-runtime.ts';
@@ -35,7 +36,8 @@ function validateEnvelope(value: unknown): asserts value is Envelope {
 }
 
 export class FisherService {
-  readonly generation = randomUUID();
+  generation = randomUUID();
+  private previews=new Map<string,{save:Save;summary:SavePreview;started:boolean}>();
   private save: Save = emptySave();
   private tail: Promise<unknown> = Promise.resolve();
   private queued = 0;
@@ -58,13 +60,54 @@ export class FisherService {
       issue: this.store.issue ?? (this.writeError ? '保存没有完成，已暂停；请重试保存' : null),
       coins: this.save.coins, tokens: this.save.tokens, research: this.save.research, experience: this.save.experience,
       released: this.save.released, inventory: this.save.inventory, catalog: this.save.catalog, journey:this.save.journey,
-      work: workView(this.save.work, this.clock().wall), life: this.save.life,
+      work: workView(this.save.work, this.clock().wall), life: this.save.life,storage:{canManage:this.store.canManage},
       active: active ? { id: active.id, owner: active.owner, ownerEpoch: active.ownerEpoch, leaseUntil: active.leaseUntil,
         castRevision: active.castRevision, inputCursor: active.inputCursor, paused: active.paused,
         challenge: active.challenge, simulation: active.simulation,setup:active.meta } : null,
       pending: this.save.pending, lastOutcome: this.save.lastOutcome });
   }
   get observingWork(): boolean { return this.save.work.enabled && !this.stopped && !this.writeError && !this.store.issue; }
+  exportSave():Promise<string> {
+    return this.tail.then(()=>{requireState(!this.stopped,'插件已停止');return this.store.issue?this.store.exportOriginal():encodeSave(this.save);});
+  }
+  previewSave(value:unknown):Promise<SavePreview> {
+    if(this.queued>=256)return Promise.reject(new ActionError('保存队列繁忙，请稍后重试',429));
+    this.queued++;
+    const job=this.tail.then(async()=>{
+      requireState(!this.stopped&&this.store.canManage,'当前存档不可替换，请先关闭占用它的其他宿主');
+      const request=object(value);requireState(request.source==='file'||request.source==='backup','请选择存档来源');
+      const text=request.source==='backup'?await this.store.backupText():request.text;
+      requireState(typeof text==='string','请选择 JSON 存档文件');
+      let decoded:ReturnType<typeof decodeSave>;
+      try{decoded=decodeSave(text);}catch(error){throw new ActionError(error instanceof Error&&error.message==='UNSUPPORTED_SAVE_VERSION'?'这是其他版本的存档，原文件未修改':error instanceof Error&&error.message==='SAVE_TOO_LARGE'?'存档超过 2 MiB 上限':'存档内容或校验和不正确，原文件未修改',400);}
+      const save=decoded.save;save.id=randomUUID();save.revision=0;save.receipts=[];save.work.enabled=false;
+      if(save.active){save.active.owner=randomUUID();save.active.ownerEpoch=1;save.active.castRevision=0;save.active.leaseUntil=0;save.active.paused=true;}
+      validateSave(save);
+      const now=Date.now();for(const [key,entry] of this.previews)if(!entry.started&&entry.summary.expiresAt<now)this.previews.delete(key);
+      if(this.previews.size>=2){const oldest=[...this.previews].find(([,entry])=>!entry.started);requireState(oldest,'请先完成正在替换的存档');this.previews.delete(oldest[0]);}
+      const summary:SavePreview={id:randomUUID(),source:request.source,expiresAt:now+10*60_000,format:decoded.format,content:decoded.content,
+        coins:save.coins,inventory:save.inventory.length,discovered:Object.keys(save.catalog).length,hasCast:!!save.active};
+      this.previews.set(summary.id,{save,summary,started:false});return summary;
+    }).finally(()=>{this.queued--;});
+    this.tail=job.catch(()=>{});return job;
+  }
+  private async manageSave(request:ActionRequest,hash:string):Promise<MutationResult> {
+    requireState(this.store.canManage,'当前存档不可替换，请先关闭占用它的其他宿主');
+    requireState(request.expectedRevision===this.save.revision,'状态已更新，请重新确认');
+    const action=request.action;let next:Save;
+    if(action.type==='save.delete') {
+      requireState(action.confirmation==='删除摸鱼海岸','请输入完整的删除确认文字');next=emptySave();
+    } else {
+      requireState(action.type==='save.import'&&action.confirmed===true,'请先预览并确认替换');
+      const entry=this.previews.get(id(action.previewId));requireState(entry&&(entry.started||entry.summary.expiresAt>=Date.now()),'存档预览已过期，请重新选择文件');
+      entry.started=true;next=structuredClone(entry.save);
+    }
+    next.revision=this.save.revision+1;next.receipts=[{id:request.actionId,fingerprint:hash,revision:next.revision}];validateSave(next);
+    try{if(action.type==='save.delete')await this.store.reset(next);else await this.store.replace(next);}
+    catch{this.writeError=true;this.resetObservation();this.notify();throw new ActionError(this.store.issue??'存档操作尚未完成，请重试',503);}
+    this.save=next;this.generation=randomUUID();this.writeError=false;this.resetObservation();this.previews.clear();this.notify();
+    return {snapshot:this.snapshot(),appliedRevision:next.revision,duplicate:false};
+  }
   get workEpoch(): number { return this.epoch; }
   observe(event: WorkEvent, epoch: number): void {
     if (!this.observingWork || epoch !== this.epoch) return;
@@ -129,9 +172,10 @@ export class FisherService {
       requireState(prior.fingerprint === hash, '重复请求内容不一致');
       return { snapshot: this.snapshot(), appliedRevision: prior.revision, duplicate: true };
     }
-    requireState(!this.store.issue, this.store.issue ?? '存档不可写');
     requireState(value.saveId === this.save.id && value.generation === this.generation, '连接已变化，请重新连接');
     const request = value as ActionRequest;
+    if(!input&&['save.import','save.delete'].includes(String(object(request.action).type)))return this.manageSave(request,hash);
+    requireState(!this.store.issue, this.store.issue ?? '存档不可写');
     if (!input && object(request.action).type === 'save.retry') {
       try { await this.store.write(this.save); this.writeError = false; }
       catch { throw new ActionError('仍然无法保存，请检查存档目录与可用空间', 503); }
@@ -370,6 +414,6 @@ export class FisherService {
     if (this.workTimer !== undefined) clearTimeout(this.workTimer);
     this.workTimer = undefined;
     await this.tail; await this.persistWork(at); this.resetObservation(at);
-    this.listeners.clear(); await this.store.close();
+    this.previews.clear();this.listeners.clear(); await this.store.close();
   }
 }

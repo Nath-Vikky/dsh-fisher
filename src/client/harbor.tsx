@@ -8,8 +8,14 @@ import { categoryProbabilities, preferenceAvailable } from '../game/encounters.t
 import type { GameController } from './controller.ts';
 import { SUPPLY_BAITS } from '../game/work.ts';
 import type { SupplyBait } from '../game/work.ts';
+import { createScene } from './coast-scene.tsx';
+import { createStorageView } from './storage-view.tsx';
+import { BAIT_ART } from '../game/visuals.ts';
+import { thumbnailAsset } from '../game/art.ts';
 export function createHarbor(React:typeof ReactTypes) {
-  return function Harbor({data,controller,blocked}:{data:Bootstrap;controller:GameController;blocked:boolean}) {
+  const Scene=createScene(React);
+  const Storage=createStorageView(React);
+  return function Harbor({data,controller,blocked,lowPerformance,reducedMotion,storageBusy}:{data:Bootstrap;controller:GameController;blocked:boolean;lowPerformance:boolean;reducedMotion:boolean;storageBusy:boolean}) {
     const [supplyBait, setSupplyBait] = React.useState<SupplyBait>('B02');
     const journey=data.journey,idle=!data.active&&!data.pending,level=levelInfo(data.experience),tide=currentTide(journey);
     const probabilities=categoryProbabilities(journey.region,journey.bait,tide);
@@ -17,6 +23,7 @@ export function createHarbor(React:typeof ReactTypes) {
     const missing=SPECIES.filter(item=>item.region===journey.region&&item.kind!=='guest'&&!data.catalog[item.id]);
     return <section className="dsh-fisher-collection dsh-fisher-harbor" aria-label="码头整备">
       <div className="dsh-fisher-collection-intro"><h3>把下一竿，准备得刚刚好</h3><p>手册 Lv.{level.level} · {level.needed?`升级还需 ${level.needed-level.current} 经验`:'海岸故事继续累积'} · 研究 {data.research}</p></div>
+      <div className="dsh-fisher-scene dsh-fisher-harbor-scene"><Scene data={data} lowPerformance={lowPerformance} reducedMotion={reducedMotion} quiet/></div>
       <fieldset><legend>工作之余，捎来一包补给</legend>
         <label className="dsh-fisher-toggle"><input type="checkbox" checked={data.work.enabled} disabled={blocked} onChange={event=>void controller.action({type:'work.enable',enabled:event.target.checked})}/>启用 DSH 工作补给</label>
         <p>仅从启用后的新活动累计。只观察回合边界与事件到达，不读取聊天内容，也不会发起模型请求。关闭小窗后仍可积累；关闭此开关或禁用插件就停止观察。</p>
@@ -33,7 +40,7 @@ export function createHarbor(React:typeof ReactTypes) {
       </fieldset>
       <fieldset><legend>挑一份鱼饵</legend><label>本竿鱼饵<select aria-label="本竿鱼饵" value={journey.bait} disabled={blocked||!idle} onChange={event=>{if(isBaitId(event.target.value))void controller.action({type:'bait.select',bait:event.target.value});}}>
         {BAITS.map(item=><option key={item.id} value={item.id} disabled={!preferenceAvailable(journey.region,item.id)||(item.id==='B08'&&!journey.invitations.length)}>{item.name} · {item.id==='B01'?'无限':item.id==='B08'?journey.invitations.length:journey.baits[item.id]??0}</option>)}</select></label>
-        <p>{bait(journey.bait).description}</p>
+        {BAIT_ART[journey.bait]&&<img className="dsh-fisher-gear-art" src={`${API}/assets/${thumbnailAsset(BAIT_ART[journey.bait]!)}`} alt={bait(journey.bait).name} loading="lazy" decoding="async"/>}<p>{bait(journey.bait).description}</p>
         {journey.bait==='B07'&&<label>图鉴目标<select aria-label="图鉴目标" value={journey.target??''} disabled={blocked||!idle||!clues} onChange={event=>{if(isSpeciesId(event.target.value))void controller.action({type:'bait.select',bait:'B07',target:event.target.value});}}><option value="">{clues?'选一个想认识的条目':'本区完成 10 竿后公开线索'}</option>{clues&&missing.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
         {journey.bait==='B08'&&<label>邀请谁来<select aria-label="邀请谁来" value={journey.target??''} disabled={blocked||!idle} onChange={event=>{if(isSpeciesId(event.target.value))void controller.action({type:'bait.select',bait:'B08',target:event.target.value});}}><option value="">选择来客</option>{SPECIES.filter(item=>journey.invitations.includes(item.id)&&item.region===journey.region).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
         <details><summary>这一竿的相遇机会</summary><p>{!journey.tutorialDone?'第一竿将带你认识鲫鱼。':['B07','B08'].includes(journey.bait)?'本竿由指定目标覆盖，尺寸与外观仍在开始时抽选。':journey.dryStreak[journey.region]>=8&&missing.length?'本竿优先遇到本区未发现条目。':`正常鱼 ${(probabilities[0]!*100).toFixed(1)}% · 奇珍异兽 ${(probabilities[1]!*100).toFixed(1)}% · 遗物 ${(probabilities[2]!*100).toFixed(1)}%`}</p><p>普通鱼先选稀有层：常见 60%、少见 26%、稀有 11%、珍奇 3%；偏好饵只改变同层权重。</p><p>原色外观连续 {journey.variantStreak}/39 次；连续 39 次原色后，下一尾支持变体的收获为珠光。</p></details>
@@ -45,6 +52,7 @@ export function createHarbor(React:typeof ReactTypes) {
       <fieldset><legend>鱼具小铺</legend>{(['rod','line','float'] as const).map(slot=><details key={slot} open={slot==='rod'}><summary>{slot==='rod'?'鱼竿':slot==='line'?'鱼线':'浮漂'} · {GEAR.find(item=>item.id===journey.loadout[slot])!.name}</summary>
         {GEAR.filter(item=>item.slot===slot).map(item=>{const owned=journey.ownedGear.includes(item.id),equipped=journey.loadout[slot]===item.id;return <div key={item.id} className="dsh-fisher-shop-row">{GEAR_ART[item.id]&&<img className="dsh-fisher-gear-art" src={`${API}/assets/${GEAR_ART[item.id]}`} alt={item.name} loading="lazy"/>}<div><b>{item.name}</b><small>{item.description}</small><small>{owned?'已拥有':`${item.price} 壳币 · Lv.${item.level}`}</small></div>
           <button disabled={blocked||equipped||(owned?!idle:level.level<item.level||data.coins<item.price)} onClick={()=>void controller.action({type:owned?'gear.equip':'gear.buy',gear:item.id})}>{equipped?'已装备':owned?'装备':'购买'}</button></div>;})}</details>)}</fieldset>
+      <Storage data={data} controller={controller} busy={storageBusy}/>
     </section>;
   };
 }

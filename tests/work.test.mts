@@ -119,7 +119,7 @@ test('the DSH adapter projects metadata without accessing chat, chunks, argument
 
 test('work migration, disable, restart, claim retries and write failure preserve rewards', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'dsh-fisher-test-'));
-  const old = emptySave() as unknown as Record<string, unknown>; old.formatVersion = 2; delete old.work; delete old.life;
+  const old = emptySave() as unknown as Record<string, unknown>; old.formatVersion = 2; old.contentVersion = 2; delete old.work; delete old.life;
   const original = checksum(old); await writeFile(join(directory, 'save.json'), original);
   let now = at(0), service = new FisherService(new SaveStore(directory), () => now);
   try {

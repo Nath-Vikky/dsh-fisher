@@ -8,18 +8,23 @@ import type { Quest } from '../game/quests.ts';
 import { displayed, goalDescription, goalProgress } from '../game/goals.ts';
 import { ACHIEVEMENTS, achievementProgress } from '../game/achievements.ts';
 import { GUESTS, guestEligible, guestGoal } from '../game/guests.ts';
-import type { GuestDefinition } from '../game/guests.ts';
+import type { GuestDefinition,GuestId } from '../game/guests.ts';
 import { DECOR, DECOR_SLOTS, THEMES, SLOT_NAMES, THEME_NAMES, isDecorId } from '../game/decor.ts';
 import { FRAME_IDS, FRAME_NAMES, frameAvailable } from '../game/life.ts';
 import type { GameController } from './controller.ts';
+import { API } from '../protocol.ts';
+import { guestPicture,DECOR_ART } from '../game/visuals.ts';
+import { thumbnailAsset } from '../game/art.ts';
+import { createShowcase } from './showcase.tsx';
 
-interface Props { data:Bootstrap; controller:GameController; blocked:boolean; onFish:()=>void }
+interface Props { data:Bootstrap; controller:GameController; blocked:boolean; onFish:()=>void; reducedMotion?:boolean; lowPerformance?:boolean }
 type Art = ReactTypes.ComponentType<{id:SpeciesId;variant?:Variant|null;large?:boolean}>;
 const rewardText=(coins:number,tokens:number)=>[coins?`${coins} 壳币`:'',tokens?`${tokens} 潮汐碎片`:''].filter(Boolean).join(' · ');
 const catchLabel=(item:Catch)=>`${species(item.speciesId).name}${item.lengthMm===null?'':` ${(item.lengthMm/10).toFixed(1)} cm`}${item.variant?` · ${VARIANT_NAMES[item.variant]}`:''} · ${item.id.slice(-5)}`;
 const protectedCatch=(item:Catch)=>item.isNew||item.isNewVariant||item.isRecord;
 
 export function createLifeView(React:typeof ReactTypes,FishArt:Art) {
+  const Showcase=createShowcase(React);
   function QuestCard({quest,data,controller,blocked}:{quest:Quest}&Omit<Props,'onFish'>) {
     const [skipping,setSkipping]=React.useState(false);
     const [selected,setSelected]=React.useState<string[]>([]);
@@ -49,7 +54,7 @@ export function createLifeView(React:typeof ReactTypes,FishArt:Art) {
       {skipping&&<div className="dsh-fisher-inline-confirm" role="alert"><p>换掉这份委托会清空它的进度，不扣货币。</p><div className="dsh-fisher-actions"><button disabled={blocked} onClick={()=>void controller.action({type:'quest.skip',questId:quest.id})}>确认换一份</button><button onClick={()=>setSkipping(false)}>继续留着</button></div></div>}
     </article>;
   }
-  function GuestCard({definition,data,controller,blocked,onFish}:{definition:GuestDefinition}&Props) {
+  function GuestCard({definition,data,controller,blocked,onFish,portraitOpen,onPortraitOpen}:{definition:GuestDefinition;portraitOpen:boolean;onPortraitOpen:()=>void}&Props) {
     const state=data.life.guests[definition.id];
     const [route,setRoute]=React.useState<'record'|'catches'>('catches');
     const [line,setLine]=React.useState(0);
@@ -61,7 +66,8 @@ export function createLifeView(React:typeof ReactTypes,FishArt:Art) {
       if(!result.error&&result.data?.journey.bait==='B08'&&result.data.journey.target===definition.id)onFish();
     };
     return <article className="dsh-fisher-paper-card" aria-label={`${definition.name}的来客手记`}>
-      <div className="dsh-fisher-guest-heading"><FishArt id={definition.id}/><div><small>{region(definition.region).name}</small><h3>{definition.name}</h3><p>{['尚未相遇','初识','熟络','常客'][state.stage]}</p></div></div>
+      <div className="dsh-fisher-guest-heading">{state.stage>0&&guestPicture(definition.id,state.outfit,'chibi')?<img className="dsh-fisher-guest-thumbnail" src={`${API}/assets/${thumbnailAsset(guestPicture(definition.id,state.outfit,'chibi')!)}`} alt={definition.name} loading="lazy" decoding="async"/>:<FishArt id={definition.id}/>}<div><small>{region(definition.region).name}</small><h3>{definition.name}</h3><p>{['尚未相遇','初识','熟络','常客'][state.stage]}</p></div></div>
+      {state.stage>0&&guestPicture(definition.id,state.outfit,'portrait')&&<div className="dsh-fisher-portrait"><button aria-expanded={portraitOpen} onClick={onPortraitOpen}>{portraitOpen?'收起来客立绘':'展开来客立绘'}</button>{portraitOpen&&<img src={`${API}/assets/${guestPicture(definition.id,state.outfit,'portrait')}`} alt={`${definition.name} · ${state.outfit==='base'?'初见衣装':definition.alternate}`} decoding="async"/>}</div>}
       {state.stage===0?<p>{definition.requirement}{eligible?' · 前提已满足':''}</p>:<>
         <p className="dsh-fisher-dialogue" role="status">“{definition.lines[2+line%4]}”</p>
         <div className="dsh-fisher-actions"><button onClick={()=>setLine(value=>value+1)}>聊一句</button><button disabled={blocked} onClick={()=>void controller.action({type:'guest.visit',guest:data.life.visitor===definition.id?null:definition.id})}>{data.life.visitor===definition.id?'让来客先歇歇':'请到岸边坐坐'}</button></div>
@@ -76,11 +82,12 @@ export function createLifeView(React:typeof ReactTypes,FishArt:Art) {
       {state.stage>0&&<small>重访无需鱼饵，不重复领取首次相遇的奖励。</small>}
     </article>;
   }
-  function Display({data,controller,blocked}:Omit<Props,'onFish'>) {
+  function Display({data,controller,blocked,reducedMotion=false,lowPerformance=false}:Omit<Props,'onFish'>) {
     const creatures=data.inventory.filter(item=>species(item.speciesId).creature),objects=data.inventory.filter(item=>!species(item.speciesId).creature);
     const relics=SPECIES.filter(item=>item.kind==='relic'&&data.catalog[item.id]);
     return <>
       <div className="dsh-fisher-collection-intro"><h3>把喜欢的相遇留在眼前</h3><p>展示中的个体留在背包，占一个格子；取回后才可出售、放流或交付。</p></div>
+      <Showcase data={data} reducedMotion={reducedMotion} lowPerformance={lowPerformance}/>
       <fieldset><legend>鱼缸 · {data.life.aquarium.filter(Boolean).length}/8</legend>
         <div className="dsh-fisher-display-grid">{data.life.aquarium.map((id,slot)=>{const item=creatures.find(item=>item.id===id);return <div key={slot} className="dsh-fisher-display-slot">
           {item?<FishArt id={item.speciesId} variant={item.variant}/>:<div className="dsh-fisher-vacant" aria-hidden="true">≈</div>}
@@ -101,19 +108,20 @@ export function createLifeView(React:typeof ReactTypes,FishArt:Art) {
         <p>同一主题集齐六件，就能选用对应的收获卡样式。</p>
         <label className="dsh-fisher-select-row">收获卡样式<select aria-label="收获卡样式" value={data.life.frame} disabled={blocked} onChange={event=>{const frame=FRAME_IDS.find(id=>id===event.target.value);if(frame)void controller.action({type:'frame.select',frame});}}>{FRAME_IDS.map(id=><option key={id} value={id} disabled={!frameAvailable(data.life,id)}>{FRAME_NAMES[id]}{frameAvailable(data.life,id)?'':' · 未解锁'}</option>)}</select></label>
       </fieldset>
-      <fieldset><legend>装饰小铺 · {data.life.ownedDecor.length}/24</legend>{THEMES.map(theme=><details key={theme}><summary>{THEME_NAMES[theme]} · {DECOR.filter(item=>item.theme===theme&&data.life.ownedDecor.includes(item.id)).length}/6</summary>{DECOR.filter(item=>item.theme===theme).map(item=>{const owned=data.life.ownedDecor.includes(item.id);return <div className="dsh-fisher-shop-row" key={item.id}><div><b>{item.name}</b><small>{SLOT_NAMES[item.slot]} · {item.price} 壳币</small></div><button aria-label={`${owned?'已拥有':'购买'}${item.name}`} disabled={blocked||owned||data.coins<item.price} onClick={()=>void controller.action({type:'decor.buy',decor:item.id})}>{owned?'已拥有':'购买'}</button></div>;})}</details>)}</fieldset>
+      <fieldset><legend>装饰小铺 · {data.life.ownedDecor.length}/24</legend>{THEMES.map(theme=><details key={theme}><summary>{THEME_NAMES[theme]} · {DECOR.filter(item=>item.theme===theme&&data.life.ownedDecor.includes(item.id)).length}/6</summary>{DECOR.filter(item=>item.theme===theme).map(item=>{const owned=data.life.ownedDecor.includes(item.id);return <div className="dsh-fisher-shop-row" key={item.id}>{DECOR_ART[item.id]&&<img className="dsh-fisher-gear-art" src={`${API}/assets/${thumbnailAsset(DECOR_ART[item.id]!)}`} alt="" loading="lazy" decoding="async"/>}<div><b>{item.name}</b><small>{SLOT_NAMES[item.slot]} · {item.price} 壳币</small></div><button aria-label={`${owned?'已拥有':'购买'}${item.name}`} disabled={blocked||owned||data.coins<item.price} onClick={()=>void controller.action({type:'decor.buy',decor:item.id})}>{owned?'已拥有':'购买'}</button></div>;})}</details>)}</fieldset>
     </>;
   }
   return function LifeView(props:Props) {
     const [tab,setTab]=React.useState<'quests'|'achievements'|'guests'|'display'>('quests');
+    const [portrait,setPortrait]=React.useState<GuestId|null>(null);
     const {data,controller,blocked}=props,life=data.life;
     const readyAchievements=life.achievements.length-life.claimedAchievements.length;
     return <section className="dsh-fisher-collection dsh-fisher-life" aria-label="海岸手记">
       <nav className="dsh-fisher-subtabs" aria-label="手记分类">{([['quests','委托'],['achievements','成就'],['guests','来客'],['display','展示']] as const).map(([id,name])=><button key={id} aria-pressed={tab===id} onClick={()=>setTab(id)}>{name}{id==='achievements'&&readyAchievements>0?<small> {readyAchievements}</small>:null}</button>)}</nav>
       {tab==='quests'&&<><div className="dsh-fisher-collection-intro"><h3>海风带来的小事</h3><p>三份委托随时等你，没有到期时间。“新”收获从接下后开始记录。</p><small>已完成 {life.questsCompleted} 份 · {QUESTS.length} 种委托</small></div>{life.quests.map(quest=><QuestCard key={quest.id} quest={quest} data={data} controller={controller} blocked={blocked}/>)}</>}
       {tab==='achievements'&&<><div className="dsh-fisher-collection-intro"><h3>走过的海岸，都记得</h3><p>达成 {life.achievements.length}/24 · 待领 {readyAchievements} 项</p></div>{ACHIEVEMENTS.map(item=>{const unlocked=life.achievements.includes(item.id),claimed=life.claimedAchievements.includes(item.id),current=Math.min(item.total,achievementProgress(item.id,data));return <article className="dsh-fisher-paper-card" key={item.id}><div className="dsh-fisher-card-heading"><h3>{item.name}</h3><small>{unlocked?'已达成':`${current}/${item.total}`}</small></div><p>{item.description}</p><small>{rewardText(item.reward.coins,item.reward.tokens)}{item.id==='H12'?' · 图鉴纪念卡框':item.id==='H24'?'来客合影卡框':''}</small><button disabled={blocked||!unlocked||claimed} onClick={()=>void controller.action({type:'achievement.claim',achievement:item.id})}>{claimed?'已领取':'领取成就奖励'}</button></article>;})}</>}
-      {tab==='guests'&&<><div className="dsh-fisher-collection-intro"><h3>岸边总有一个位置</h3><p>接下请求、迎接来客，再慢慢认识。来客的请求和故事都会留下。</p></div>{GUESTS.map(definition=><GuestCard key={definition.id} definition={definition} {...props}/>)}</>}
-      {tab==='display'&&<Display data={data} controller={controller} blocked={blocked}/>}
+      {tab==='guests'&&<><div className="dsh-fisher-collection-intro"><h3>岸边总有一个位置</h3><p>接下请求、迎接来客，再慢慢认识。来客的请求和故事都会留下。</p></div>{GUESTS.map(definition=><GuestCard key={definition.id} definition={definition} portraitOpen={portrait===definition.id} onPortraitOpen={()=>setPortrait(portrait===definition.id?null:definition.id)} {...props}/>)}</>}
+      {tab==='display'&&<Display data={data} controller={controller} blocked={blocked} reducedMotion={props.reducedMotion??false} lowPerformance={props.lowPerformance??false}/>}
     </section>;
   };
 }
