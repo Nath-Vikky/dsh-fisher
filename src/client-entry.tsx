@@ -20,6 +20,12 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 export const inject = ['slots', 'locale'];
 type ClientContext = Context & { slots: SlotRegistry; locale: LocaleRuntime };
 
+function ShoreMark() {
+  return <svg className="dsh-fisher-mark" viewBox="0 0 20 20" aria-hidden="true">
+    <path fill="currentColor" d="M2 6h3V4h4v2h3v2h3V6h3v3h-3v2h-4V9H8V7H5v2H2zM2 13h3v-2h3v2h3v2h4v-2h3v3h-3v2h-5v-2H7v-2H5v2H2z" />
+  </svg>;
+}
+
 class GameBoundary extends React.Component<{ children: React.ReactNode; retry: () => void }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }
@@ -75,14 +81,14 @@ function createComponents(store: WindowStore) {
     return <>
       <div className="dsh-fisher dsh-fisher-launcher">
         <button ref={opener} className="dsh-fisher-open" aria-label="打开摸鱼海岸" aria-expanded={view.open}
-          onClick={() => store.set({ open: !view.open })}><span aria-hidden="true">⌁</span> 摸鱼海岸</button>
+          onClick={() => store.set({ open: !view.open })}><ShoreMark />摸鱼海岸</button>
       </div>
       {view.open && <section className="dsh-fisher dsh-fisher-panel" aria-label="摸鱼海岸" role="region"
         style={{ left: view.x, top: view.y, width: view.width, height: view.height }}
         onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); close(); } }}>
         <header className="dsh-fisher-header" onPointerDown={event => start('move', event)} onPointerMove={move}
           onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end} onDoubleClick={() => store.reset()}>
-          <div className="dsh-fisher-brand"><span aria-hidden="true">⌁</span><div><strong>摸鱼海岸</strong><small>A LITTLE TIME BY THE SEA</small></div></div>
+          <div className="dsh-fisher-brand"><ShoreMark /><div><strong>摸鱼海岸</strong><small>FISHER / COAST NOTES</small></div></div>
           <button className="dsh-fisher-icon" onClick={close} aria-label="收起摸鱼海岸">×</button>
         </header>
         <div className="dsh-fisher-body">

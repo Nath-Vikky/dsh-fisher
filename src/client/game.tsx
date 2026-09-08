@@ -1,5 +1,5 @@
 import type * as ReactTypes from 'react';
-import { API, isBootstrap } from '../protocol.ts';
+import { API, COAST_ASSET, isBootstrap } from '../protocol.ts';
 import type { GameProps } from '../protocol.ts';
 import { drawCoast } from './coast.ts';
 
@@ -7,6 +7,8 @@ import { drawCoast } from './coast.ts';
 export function createGame(React: typeof ReactTypes): ReactTypes.ComponentType<GameProps> {
   function Scene({ lowPerformance }: GameProps) {
     const canvas = React.useRef<HTMLCanvasElement>(null);
+    const [artState, setArtState] = React.useState<'loading' | 'ready' | 'error'>('loading');
+    const [artAttempt, setArtAttempt] = React.useState(0);
     React.useEffect(() => {
       const element = canvas.current;
       const context = element?.getContext('2d', { alpha: false });
@@ -17,13 +19,15 @@ export function createGame(React: typeof ReactTypes): ReactTypes.ComponentType<G
       let last = 0;
       let elapsed = 0;
       let stopped = false;
+      let artwork: HTMLImageElement | undefined;
+      const picture = new Image();
       const reduced = matchMedia('(prefers-reduced-motion: reduce)');
       const render = (now: number) => {
         if (stopped || document.hidden) return;
         if (now - last >= (lowPerformance ? 50 : 1000 / 30)) {
           elapsed += Math.min(50, now - last) / 1000;
           last = now;
-          drawCoast(context, width, height, reduced.matches ? 0 : elapsed);
+          drawCoast(context, width, height, reduced.matches ? 0 : elapsed, artwork);
         }
         frame = requestAnimationFrame(render);
       };
@@ -31,16 +35,16 @@ export function createGame(React: typeof ReactTypes): ReactTypes.ComponentType<G
         cancelAnimationFrame(frame);
         if (stopped || document.hidden) return;
         last = performance.now();
-        drawCoast(context, width, height, reduced.matches ? 0 : elapsed);
-        if (!reduced.matches) frame = requestAnimationFrame(render);
+        drawCoast(context, width, height, reduced.matches ? 0 : elapsed, artwork);
+        if (!reduced.matches && artwork) frame = requestAnimationFrame(render);
       };
       const resize = () => {
         const rect = element.getBoundingClientRect();
         if (rect.width === width && rect.height === height) return;
         width = rect.width; height = rect.height;
-        const ratio = Math.min(window.devicePixelRatio || 1, lowPerformance ? 1 : 1.5);
-        element.width = Math.max(1, Math.round(width * ratio));
-        element.height = Math.max(1, Math.round(height * ratio));
+        const ratio = 1 / (lowPerformance ? 3 : 2);
+        element.width = Math.max(1, Math.ceil(width * ratio));
+        element.height = Math.max(1, Math.ceil(height * ratio));
         context.setTransform(ratio, 0, 0, ratio, 0, 0);
         start();
       };
@@ -49,12 +53,29 @@ export function createGame(React: typeof ReactTypes): ReactTypes.ComponentType<G
       document.addEventListener('visibilitychange', start);
       reduced.addEventListener('change', start);
       resize();
+      setArtState('loading');
+      const deadline = setTimeout(() => {
+        picture.onload = null; picture.onerror = null; picture.removeAttribute('src');
+        if (!stopped) setArtState('error');
+      }, 15_000);
+      picture.onload = () => {
+        clearTimeout(deadline);
+        if (stopped) return;
+        artwork = picture; setArtState('ready'); start();
+      };
+      picture.onerror = () => { clearTimeout(deadline); if (!stopped) setArtState('error'); };
+      picture.src = `${COAST_ASSET}${artAttempt ? `?retry=${artAttempt}` : ''}`;
       return () => {
         stopped = true; cancelAnimationFrame(frame); observer.disconnect();
+        clearTimeout(deadline); picture.onload = null; picture.onerror = null; picture.removeAttribute('src');
         document.removeEventListener('visibilitychange', start); reduced.removeEventListener('change', start);
       };
-    }, [lowPerformance]);
-    return <canvas ref={canvas} aria-label="平静海湾与木码头" role="img" />;
+    }, [lowPerformance, artAttempt]);
+    return <><canvas ref={canvas} aria-label="像素海湾与木码头" role="img" data-scene-state={artState} />
+      {artState !== 'ready' && <div className="dsh-fisher-scene-loading" role="status">
+        <span>{artState === 'error' ? '海岸画面暂时没有展开' : '正在展开海岸…'}</span>
+        {artState === 'error' && <button onClick={() => setArtAttempt(value => value + 1)}>重新加载画面</button>}
+      </div>}</>;
   }
 
   return function Game({ lowPerformance }: GameProps) {
@@ -110,14 +131,16 @@ export function createGame(React: typeof ReactTypes): ReactTypes.ComponentType<G
     }, [attempt]);
 
     return <div className="dsh-fisher-game">
+      <div className="dsh-fisher-location"><div><small>海岸手记 · 01</small><h2>摸鱼塘</h2></div>
+        <span className="dsh-fisher-tide"><i aria-hidden="true" />平潮</span></div>
       <div className="dsh-fisher-scene"><Scene lowPerformance={lowPerformance} />
-        <div className="dsh-fisher-scene-label"><span>THE QUIET SHORE</span><h2>风平浪静的一天</h2></div>
-        <div className="dsh-fisher-note">留一点时间给风，给水，也给自己。</div>
+        <div className="dsh-fisher-scene-label"><span>风平浪静的一天</span><b>01 / SHORE</b></div>
+        <div className="dsh-fisher-note">留一点时间给风，也给自己。</div>
       </div>
       <div className="dsh-fisher-footer"><h3>欢迎来到摸鱼海岸</h3><p>海岸还在布置中，先坐一会儿。</p>
         <div className="dsh-fisher-connection" data-state={connection} role="status">
           <span><span className="dsh-fisher-dot" />{message}</span>
-          {connection === 'error' ? <button onClick={() => setAttempt(value => value + 1)}>重新连接</button> : <span>开发预览</span>}
+          {connection === 'error' ? <button onClick={() => setAttempt(value => value + 1)}>重新连接</button> : <span className="dsh-fisher-preview-label">开发预览</span>}
         </div>
       </div>
     </div>;

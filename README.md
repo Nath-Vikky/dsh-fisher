@@ -2,11 +2,12 @@
 
 面向 DeepSeek Harness（DSH）Web 的轻量娱乐插件。
 
-当前版本为 `0.1.0-dev.1` 开发预览，可从源码构建并本地安装，尚未发布到 npm。此版本提供海岸窗口与动态场景，尚不包含可玩的钓鱼流程。
+当前版本为 `0.1.0-dev.2` 开发预览，可从源码构建并本地安装，尚未发布到 npm。此版本提供海岸窗口与像素场景，尚不包含可玩的钓鱼流程。
 
 ## 当前功能
 
 - 从页面右下角打开或收起“摸鱼海岸”。
+- 像素海岸搭配细墨线、漫画分格、排线阴影与暖纸色界面。
 - 拖动标题栏移动窗口，拖动右下角调整尺寸；缩放按钮也支持方向键。
 - 在 DSH 设置中选择尺寸预设、输入宽高、恢复窗口位置或降低动画开销。
 - 首次打开时加载场景；关闭窗口或隐藏页面时停止绘制。
@@ -29,7 +30,7 @@ npm pack --ignore-scripts
 
 ```powershell
 $env:DSH_HOME = Join-Path $PWD 'tmp/dsh-home'
-$fisherPackage = Join-Path $PWD 'nath-vikky-dsh-fisher-0.1.0-dev.1.tgz'
+$fisherPackage = Join-Path $PWD 'nath-vikky-dsh-fisher-0.1.0-dev.2.tgz'
 pnpm dlx @deepseek-ai/dsh@0.1.2-rc.1 plugin --profile web add --ignore-scripts $fisherPackage
 pnpm dlx @deepseek-ai/dsh@0.1.2-rc.1 web
 ```

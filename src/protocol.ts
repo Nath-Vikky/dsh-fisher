@@ -1,5 +1,6 @@
-export const VERSION = '0.1.0-dev.1';
+export const VERSION = '0.1.0-dev.2';
 export const API = '/api/dsh-fisher/v1';
+export const COAST_ASSET = `${API}/assets/coast-pixel-ink-v1.png`;
 
 export interface Bootstrap {
   protocolVersion: 1;

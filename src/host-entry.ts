@@ -4,7 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Context } from '@deepseek-ai/cordis';
 import type { HostConnectionHandle } from '@deepseek-ai/dsh-client-connection';
 import type { WebServer } from '@deepseek-ai/dsh-host-webserver';
-import { API, VERSION } from './protocol.ts';
+import { API, COAST_ASSET, VERSION } from './protocol.ts';
 import type { Bootstrap } from './protocol.ts';
 
 export const name = 'dsh-fisher';
@@ -24,7 +24,12 @@ export function apply(ctx: HostContext): void {
     const streams = new Map<ServerResponse, IncomingMessage>();
     let heartbeat: ReturnType<typeof setInterval> | undefined;
     let disposed = false;
-    let gameScript: Promise<Buffer> | undefined;
+    const assets = new Map<string, { file: URL; contentType: string; cacheControl: string; buffer?: Promise<Buffer> }>([
+      [`${API}/client/game.js`, { file: new URL('./game.js', import.meta.url),
+        contentType: 'text/javascript; charset=utf-8', cacheControl: 'no-store' }],
+      [COAST_ASSET, { file: new URL('../assets/runtime/coast-pixel-ink-v1.png', import.meta.url),
+        contentType: 'image/png', cacheControl: 'private, max-age=604800, immutable' }],
+    ]);
 
     const stopHeartbeat = () => {
       if (heartbeat !== undefined) clearInterval(heartbeat);
@@ -51,8 +56,8 @@ export function apply(ctx: HostContext): void {
         }
         if (disposed) { json(response, 503, { error: 'UNAVAILABLE' }); return; }
         const pathname = new URL(request.url ?? '/', 'http://localhost').pathname;
-        const known = [`${API}/bootstrap`, `${API}/state`, `${API}/events`, `${API}/client/game.js`];
-        if (!known.includes(pathname)) { json(response, 404, { error: 'NOT_FOUND' }); return; }
+        const known = [`${API}/bootstrap`, `${API}/state`, `${API}/events`];
+        if (!known.includes(pathname) && !assets.has(pathname)) { json(response, 404, { error: 'NOT_FOUND' }); return; }
         if (request.method !== 'GET') {
           response.setHeader('Allow', 'GET');
           json(response, 405, { error: 'METHOD_NOT_ALLOWED' });
@@ -62,19 +67,20 @@ export function apply(ctx: HostContext): void {
           json(response, 200, snapshot);
           return;
         }
-        if (pathname === `${API}/client/game.js`) {
+        const asset = assets.get(pathname);
+        if (asset) {
           try {
-            gameScript ??= readFile(new URL('./game.js', import.meta.url));
-            const body = await gameScript;
+            asset.buffer ??= readFile(asset.file);
+            const body = await asset.buffer;
             if (disposed || response.destroyed) { response.end(); return; }
             response.writeHead(200, {
-              'Content-Type': 'text/javascript; charset=utf-8',
-              'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
+              'Content-Type': asset.contentType,
+              'Cache-Control': asset.cacheControl, 'X-Content-Type-Options': 'nosniff',
             });
             response.end(body);
           } catch {
-            gameScript = undefined;
-            if (!response.destroyed) json(response, 503, { error: 'CLIENT_UNAVAILABLE' });
+            delete asset.buffer;
+            if (!response.destroyed) json(response, 503, { error: 'ASSET_UNAVAILABLE' });
           }
           return;
         }
