@@ -1,5 +1,6 @@
 node_modules/
 dist/
+lib/
 coverage/
 *.tsbuildinfo
 *.tgz
@@ -34,3 +35,5 @@ Thumbs.db
 /docs/internal/
 /reports/
 /tools/build-plan.mjs
+/assets/masters/
+/assets/references/
