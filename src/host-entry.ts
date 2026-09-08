@@ -4,7 +4,8 @@ import type { Context } from '@deepseek-ai/cordis';
 import type { HostConnectionHandle } from '@deepseek-ai/dsh-client-connection';
 import type { WebServer } from '@deepseek-ai/dsh-host-webserver';
 import { API, COAST_ASSET } from './protocol.ts';
-import { SPECIES, spriteName } from './game/content.ts';
+import { SPRITES } from './game/content.ts';
+import { GEAR_ART } from './game/gear.ts';
 import { ActionError, FisherService } from './host/service.ts';
 
 export const name = 'dsh-fisher';
@@ -31,8 +32,7 @@ export function apply(ctx: HostContext): void {
       [COAST_ASSET, { file: new URL('../assets/runtime/coast-pixel-ink-v1.png', import.meta.url),
         contentType: 'image/png', cacheControl: 'private, max-age=604800, immutable' }],
     ]);
-    for (const entry of SPECIES) {
-      const filename = spriteName(entry.id);
+    for (const filename of new Set([...Object.values(SPRITES).flatMap(variants=>Object.values(variants)),...Object.values(GEAR_ART)])) {
       assets.set(`${API}/assets/${filename}`, { file: new URL(`../assets/runtime/${filename}`, import.meta.url),
         contentType: 'image/png', cacheControl: 'private, max-age=604800, immutable' });
     }

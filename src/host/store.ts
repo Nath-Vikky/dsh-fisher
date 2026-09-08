@@ -4,7 +4,7 @@ import { createServer } from 'node:net';
 import type { Server } from 'node:net';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { emptySave, object, validateSave } from './model.ts';
+import { emptySave, object, upgradeSave, validateSave } from './model.ts';
 import type { Save } from './model.ts';
 
 const MAX_BYTES = 2 * 1024 * 1024;
@@ -25,9 +25,10 @@ function encode(save: Save): string {
 async function readSave(path: string): Promise<Save> {
   if ((await stat(path)).size > MAX_BYTES) throw new Error('SAVE_TOO_LARGE');
   const wrapper = object(JSON.parse(await readFile(path, 'utf8')));
-  validateSave(wrapper.save);
+  const version=object(wrapper.save).formatVersion;
+  if (version!==1 && version!==2) throw new Error('UNSUPPORTED_SAVE_VERSION');
   if (wrapper.checksum !== digest(JSON.stringify(wrapper.save))) throw new Error('SAVE_CHECKSUM_MISMATCH');
-  return wrapper.save;
+  return upgradeSave(wrapper.save);
 }
 function errorCode(error: unknown): string { return String((error as NodeJS.ErrnoException)?.code ?? ''); }
 async function replaceFile(source: string, target: string): Promise<void> {
@@ -73,6 +74,16 @@ export class SaveStore {
     } catch { this.issue = '存档正在被另一个宿主使用，或写入锁暂不可用'; mutex.close(); }
     try {
       const save = await readSave(join(this.directory, 'save.json'));
+      const original=await readFile(join(this.directory,'save.json'),'utf8');
+      if (!this.issue && object(object(JSON.parse(original)).save).formatVersion===1) {
+        try {
+          const backup=await open(join(this.directory,'save.before-v2.json'),'wx',0o600);
+          try { await backup.writeFile(original,'utf8');await backup.sync(); } finally { await backup.close(); }
+        } catch (error) {
+          const existing=errorCode(error)==='EEXIST'?await readFile(join(this.directory,'save.before-v2.json'),'utf8').catch(()=>null):null;
+          if (existing!==original) this.issue='旧存档备份未完成或不一致，已暂停升级';
+        }
+      }
       this.previous = save;
       return save;
     } catch (error) {

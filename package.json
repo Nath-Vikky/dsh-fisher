@@ -1,6 +1,6 @@
 {
   "name": "@nath-vikky/dsh-fisher",
-  "version": "0.1.0-dev.3",
+  "version": "0.1.0-dev.4",
   "description": "A cozy fishing companion for DeepSeek Harness Web",
   "private": true,
   "type": "module",

@@ -117,4 +117,22 @@ export const styles = `
 .dsh-fisher-game>.dsh-fisher-connection{flex-shrink:0;font-size:10px;min-height:25px;margin-top:auto;padding:7px 5px 2px}
 .dsh-fisher-connection button{font-size:10px;white-space:nowrap;padding:5px}
 @media(prefers-reduced-motion:reduce){.dsh-fisher *{scroll-behavior:auto!important}}
+.dsh-fisher-harbor fieldset{margin:0;padding:10px;border:1px solid var(--fisher-ink);background:var(--fisher-raised);min-width:0;box-shadow:2px 2px 0 #293f4633}
+.dsh-fisher-harbor legend{font-size:12px;letter-spacing:.06em;padding:0 7px;background:var(--fisher-paper)}
+.dsh-fisher-harbor label{display:flex;gap:8px;align-items:center;justify-content:space-between;font-size:11px}
+.dsh-fisher-harbor select,.dsh-fisher-collection input{min-width:0;max-width:100%;padding:7px 5px;font:11px inherit;color:var(--fisher-ink);background:var(--fisher-paper);border:1px solid var(--fisher-ink)}
+.dsh-fisher-harbor select{flex:1;font-size:11px}
+.dsh-fisher-collection input{box-sizing:border-box;width:100%;margin-top:10px;font-size:12px}
+.dsh-fisher-harbor details{margin-top:10px;border-top:1px solid #293f4633;padding-top:8px}
+.dsh-fisher-harbor summary{font-size:11px;cursor:pointer;line-height:1.6}
+.dsh-fisher-shop-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px dashed #293f4633;font-size:12px}
+.dsh-fisher-shop-row>div{flex:1;min-width:0}.dsh-fisher-shop-row small{display:block;font-size:10px;color:var(--fisher-muted);line-height:1.6}
+.dsh-fisher-shop-row button{flex-shrink:0;font-size:11px;padding:7px}
+.dsh-fisher-art-note{font-size:11px;text-align:center;color:var(--fisher-muted);padding:4px}.dsh-fisher-art-note small{display:block;font-size:9px;margin-top:5px}
+.dsh-fisher .dsh-fisher-lock{font-size:10px;padding:3px 6px;margin-bottom:7px;background:var(--fisher-paper)}
+.dsh-fisher .dsh-fisher-lock[aria-pressed=true]{background:var(--fisher-coral)}
+.dsh-fisher-actions button[aria-pressed=true]{background:var(--fisher-sea)}
+.dsh-fisher-entry small{display:block}.dsh-fisher-catch-stats{flex-wrap:wrap;gap:5px 12px}
+.dsh-fisher-overflow{font-size:10px;color:#a74428;margin:0}
+.dsh-fisher-gear-art{width:58px;height:68px;object-fit:contain;image-rendering:pixelated;flex-shrink:0}
 `;

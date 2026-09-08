@@ -130,6 +130,7 @@ export class GameController {
     if (!this.view.busy && !this.pending) {
       while (this.accumulator >= TICK_MS) {
         this.accumulator -= TICK_MS;
+        if (sim.phase === 'recovery') break;
         if (sim.phase === 'bite') {
           if (now - this.lastCheckpoint >= 5000) void this.checkpoint('checkpoint');
           break;
@@ -137,7 +138,7 @@ export class GameController {
         if (this.view.reel !== sim.reel) this.edges.push({ tick: sim.tick + 1, reel: this.view.reel });
         sim = step(sim, cast.challenge, this.view.reel);
         this.view = { ...this.view, sim };
-        if (sim.tick - cast.simulation.tick >= 40 || sim.phase === 'bite' || sim.phase === 'caught' || sim.phase === 'escaped') {
+        if (sim.tick - cast.simulation.tick >= 40 || sim.phase === 'bite' || sim.phase === 'caught' || sim.phase === 'escaped' || sim.phase === 'recovery') {
           void this.checkpoint('checkpoint'); break;
         }
       }

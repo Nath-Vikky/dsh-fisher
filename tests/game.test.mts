@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 import { encounter, initialSimulation, randomStream, replay, step } from '../src/game/engine.ts';
+import { species } from '../src/game/content.ts';
 import type { InputEdge } from '../src/game/engine.ts';
 import type { Action, ActionRequest, InputRequest } from '../src/protocol.ts';
 import { FisherService } from '../src/host/service.ts';
@@ -37,13 +38,19 @@ function checkpoint(service: FisherService, command: InputRequest['command'] = '
   return { ...envelope(service), castId: cast.id, ownerEpoch: cast.ownerEpoch, expectedCastRevision: cast.castRevision,
     fromTick: cast.simulation.tick, inputCursor: cast.inputCursor, toTick: sim.tick, edges, command };
 }
-async function catchOne(service: FisherService) {
+async function catchOne(service: FisherService, attempt=0): Promise<NonNullable<ReturnType<FisherService['snapshot']>['pending']>> {
   if (!service.snapshot().active) await action(service, { type: 'cast.begin', mode: 'assisted' });
   for (let batch = 0; batch < 100 && service.snapshot().active; batch++) {
     const cast = service.snapshot().active!;
     await service.mutate(checkpoint(service, cast.simulation.phase === 'bite' ? 'hook' : 'checkpoint'), true);
   }
   assert.ok(service.snapshot().pending, 'assisted fishing should produce a pending catch');
+  const pending=service.snapshot().pending!;
+  if (!species(pending.speciesId).creature) {
+    assert.ok(attempt<10,'transaction fixture needs a creature');
+    await action(service,{type:'catch.resolve',catchId:pending.id,choice:'keep'});
+    return catchOne(service,attempt+1);
+  }
   return service.snapshot().pending!;
 }
 
@@ -100,7 +107,7 @@ test('one writer, restart with the same cast, ownership fencing, and exactly-onc
     assert.deepEqual(privateAfter.catch, privateBefore.catch);
     const item = await catchOne(service);
     const coins = service.snapshot().coins;
-    const sale = request(service, { type: 'catch.resolve', catchId: item.id, choice: 'sell' });
+    const sale = request(service, { type: 'catch.resolve', catchId: item.id, choice: 'sell', confirmed:true });
     const [first, duplicate] = await Promise.all([service.mutate(sale, false), service.mutate(sale, false)]);
     assert.equal(first.duplicate, false); assert.equal(duplicate.duplicate, true);
     assert.equal(service.snapshot().coins, coins + item.price);
@@ -111,7 +118,7 @@ test('one writer, restart with the same cast, ownership fencing, and exactly-onc
     assert.equal((await service.mutate(sale, false)).duplicate, true, 'receipt survives a host generation change');
     const another = await catchOne(service);
     await action(service, { type: 'catch.resolve', catchId: another.id, choice: 'keep' });
-    const release = request(service, { type: 'inventory.resolve', catchId: another.id, choice: 'release' });
+    const release = request(service, { type: 'inventory.resolve', catchId: another.id, choice: 'release', confirmed:true });
     await service.mutate(release, false); await service.mutate(release, false);
     assert.equal(service.snapshot().released, 1); assert.equal(service.snapshot().inventory.length, 0);
   } finally { await service.close(); await competing.close(); await cleanup(directory); }
@@ -133,7 +140,7 @@ test('failed disk writes cannot award income; corrupt and newer saves are preser
     await service.initialize();
     const item = await catchOne(service);
     const coins = service.snapshot().coins;
-    const sale = request(service, { type: 'catch.resolve', catchId: item.id, choice: 'sell' });
+    const sale = request(service, { type: 'catch.resolve', catchId: item.id, choice: 'sell', confirmed:true });
     const disk = await readFile(join(directory, 'save.json'), 'utf8');
     store.fail = true;
     await assert.rejects(service.mutate(sale, false), /保存没有完成/);

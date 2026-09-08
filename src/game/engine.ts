@@ -1,19 +1,22 @@
-import { SPECIES, species } from './content.ts';
-import type { Pattern, SpeciesId } from './content.ts';
+import { species } from './content.ts';
+import type { Pattern, RegionId, SpeciesId, Variant } from './content.ts';
+import type { Modifiers } from './gear.ts';
+import { behavior, stepCurrent } from './fight.ts';
 
 export const TICK_MS = 50;
 export const MAX_TICKS = 3600;
-export type Mode = 'standard' | 'assisted';
-export type Phase = 'casting' | 'waiting' | 'bite' | 'fighting' | 'caught' | 'escaped';
-export interface Challenge { seed: number; waitTicks: number; pattern: Pattern; mode: Mode }
+export type Mode = 'standard' | 'assisted' | 'guided';
+export type Phase = 'casting' | 'waiting' | 'bite' | 'fighting' | 'caught' | 'escaped' | 'recovery';
+export interface Challenge { seed: number; waitTicks: number; pattern: Pattern; mode: Mode; rulesVersion?: 2; modifiers?: Modifiers; size?: number }
 export interface Simulation {
   tick: number; fightTicks: number; phase: Phase; progress: number; tension: number;
-  danger: number; reel: boolean; assistedRelease: boolean; rollbacks: number;
+  danger: number; reel: boolean; assistedRelease: boolean; rollbacks: number; peakDanger?: number;
 }
 export interface InputEdge { tick: number; reel: boolean }
 export interface Catch {
-  id: string; speciesId: SpeciesId; lengthMm: number; weightG: number; quality: number;
+  id: string; speciesId: SpeciesId; lengthMm: number | null; weightG: number | null; quality: number | null;
   price: number; caughtAt: string; isNew: boolean; isRecord: boolean;
+  region: RegionId; variant: Variant | null; isNewVariant: boolean; locked: boolean;
 }
 export interface Encounter { challenge: Challenge; catch: Catch }
 
@@ -30,10 +33,10 @@ export function randomStream(seed: number, label: string): () => number {
 }
 export function encounter(seed: number, id: string, mode: Mode): Encounter {
   const pick = randomStream(seed, 'species')() * 97;
-  const definition = SPECIES[pick < 30 ? 0 : pick < 60 ? 1 : pick < 90 ? 2 : 3]!;
+  const definition = species(pick < 30 ? 'F001' : pick < 60 ? 'F002' : pick < 90 ? 'F003' : 'A001');
   const sizes = randomStream(seed, 'size');
   const u = sizes();
-  const { min, max, mode: peak } = definition;
+  const min = definition.min!, max = definition.max!, peak = definition.mode!;
   const lengthMm = Math.round(u < (peak - min) / (max - min)
     ? min + Math.sqrt(u * (max - min) * (peak - min))
     : max - Math.sqrt((1 - u) * (max - min) * (max - peak)));
@@ -43,9 +46,9 @@ export function encounter(seed: number, id: string, mode: Mode): Encounter {
   return {
     challenge: { seed: Math.floor(behavior() * 4294967296), waitTicks: 40 + Math.floor(behavior() * 81), pattern: definition.pattern, mode },
     catch: { id, speciesId: definition.id, lengthMm,
-      weightG: Math.max(1, Math.round(definition.weight * (lengthMm / peak) ** 3 * (.9 + sizes() * .2))),
+      weightG: Math.max(1, Math.round(definition.weight! * (lengthMm / peak) ** 3 * (.9 + sizes() * .2))),
       quality: Math.round(q * 1000), price: Math.max(1, Math.min(1000, Math.round(definition.price * (.75 + .75 * q)))),
-      caughtAt: '', isNew: false, isRecord: false },
+      caughtAt: '', isNew: false, isRecord: false, region:'L01', variant:'original', isNewVariant:false, locked:false },
   };
 }
 export function initialSimulation(): Simulation {
@@ -53,19 +56,22 @@ export function initialSimulation(): Simulation {
     danger: 0, reel: false, assistedRelease: false, rollbacks: 0 };
 }
 export function warning(sim: Simulation, challenge: Challenge): string {
+  if (sim.phase === 'recovery') return '这一竿需要恢复，收获仍然保留';
   if (sim.phase !== 'fighting') return '';
   if (sim.fightTicks >= 3000) return '水流在帮你，把这一竿慢慢收回来';
   if (sim.danger > 0) return '鱼线吃紧 · 松开收线';
+  if (challenge.rulesVersion === 2) return behavior(sim.fightTicks, challenge).hint || (sim.assistedRelease ? '辅助松线中' : '按住收线，张力升高时松开');
   const beat = (sim.fightTicks + challenge.seed % 40) % 120;
   if (challenge.pattern === 'dart' && beat >= 68 && beat < 100) return beat < 80 ? '它要冲刺了 · 准备松线' : '正在冲刺 · 稳住';
   if (challenge.pattern === 'rollback' && sim.rollbacks < 2 && sim.progress >= (sim.rollbacks === 0 ? 290000 : 640000)) return '这股力道，似乎想倒着游';
   return sim.assistedRelease ? '辅助松线中' : '按住收线，张力升高时松开';
 }
 export function step(sim: Simulation, challenge: Challenge, reel: boolean): Simulation {
-  if (sim.phase === 'caught' || sim.phase === 'escaped' || sim.phase === 'bite') return sim;
+  if (sim.phase === 'caught' || sim.phase === 'escaped' || sim.phase === 'bite' || sim.phase === 'recovery') return sim;
   const next = { ...sim, tick: sim.tick + 1, reel };
   if (sim.phase === 'casting') { if (next.tick >= 12) next.phase = 'waiting'; return next; }
   if (sim.phase === 'waiting') { if (next.tick >= 12 + challenge.waitTicks) next.phase = 'bite'; return next; }
+  if (challenge.rulesVersion === 2) return stepCurrent(sim, challenge, reel);
   next.fightTicks++;
   const safety = next.fightTicks >= 3000;
   if (challenge.mode === 'assisted' || safety) {
@@ -104,5 +110,10 @@ export function replay(sim: Simulation, challenge: Challenge, toTick: number, ed
 }
 export function catchBoundsValid(item: Catch): boolean {
   const def = species(item.speciesId);
-  return item.lengthMm >= def.min && item.lengthMm <= def.max && item.price >= 1 && item.price <= 1000;
+  if (item.region !== def.region) return false;
+  if (def.creature) return item.lengthMm !== null && item.weightG !== null && item.quality !== null
+    && item.lengthMm >= def.min! && item.lengthMm <= def.max! && item.weightG >= 1
+    && item.variant !== null && item.price >= 1 && item.price <= 1000;
+  return item.lengthMm === null && item.weightG === null && item.quality === null && item.variant === null
+    && (def.kind === 'abstract' ? item.price >= 1 && item.price <= 1000 : item.price === 0);
 }

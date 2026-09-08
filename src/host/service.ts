@@ -1,10 +1,16 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { encounter, initialSimulation, replay } from '../game/engine.ts';
+import { initialSimulation, replay } from '../game/engine.ts';
 import type { Catch } from '../game/engine.ts';
+import { isRegionId, isSpeciesId, species } from '../game/content.ts';
+import type { SpeciesId } from '../game/content.ts';
+import { verifyContent } from '../game/content-check.ts';
+import { rollEncounter } from '../game/encounters.ts';
+import { gear, isGearId } from '../game/gear.ts';
+import { bait, consumeOverride, finishTide, isBaitId, isInventorySpecies, isTide, levelInfo, regionUnlocked } from '../game/progression.ts';
 import { VERSION } from '../protocol.ts';
 import type { ActionRequest, Bootstrap, Envelope, InputRequest, MutationResult } from '../protocol.ts';
 import { emptySave, id, integer, object, validateSave } from './model.ts';
-import type { Save } from './model.ts';
+import type { PrivateCast, Save } from './model.ts';
 import { SaveStore } from './store.ts';
 
 export class ActionError extends Error {
@@ -34,7 +40,7 @@ export class FisherService {
   private readonly listeners = new Set<() => void>();
   readonly store: SaveStore;
   constructor(store = new SaveStore()) { this.store = store; }
-  async initialize(): Promise<void> { this.save = await this.store.load(); }
+  async initialize(): Promise<void> { verifyContent();this.save = await this.store.load(); }
   subscribe(listener: () => void): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   snapshot(): Bootstrap {
     const { active } = this.save;
@@ -42,10 +48,10 @@ export class FisherService {
       saveId: this.save.id, gameplayAvailable: !this.stopped && !this.store.issue && !this.writeError,
       issue: this.store.issue ?? (this.writeError ? '保存没有完成，已暂停；请重试保存' : null),
       coins: this.save.coins, tokens: this.save.tokens, research: this.save.research, experience: this.save.experience,
-      released: this.save.released, inventory: this.save.inventory, catalog: this.save.catalog,
+      released: this.save.released, inventory: this.save.inventory, catalog: this.save.catalog, journey:this.save.journey,
       active: active ? { id: active.id, owner: active.owner, ownerEpoch: active.ownerEpoch, leaseUntil: active.leaseUntil,
         castRevision: active.castRevision, inputCursor: active.inputCursor, paused: active.paused,
-        challenge: active.challenge, simulation: active.simulation } : null,
+        challenge: active.challenge, simulation: active.simulation,setup:active.meta } : null,
       pending: this.save.pending, lastOutcome: this.save.lastOutcome });
   }
   mutate(value: unknown, input: boolean): Promise<MutationResult> {
@@ -101,8 +107,16 @@ export class FisherService {
         requireState(action.mode === 'standard' || action.mode === 'assisted', '请选择有效模式');
         const castId = randomUUID();
         const seed = randomBytes(4).readUInt32LE();
-        const selected = encounter(seed, castId, action.mode);
-        save.active = { id: castId, seed, catch: selected.catch, challenge: selected.challenge,
+        const journey=save.journey;
+        requireState(regionUnlocked(journey.region,save.experience,save.research),'这个钓点还未解锁');
+        requireState(journey.bait==='B01'||journey.bait==='B08'||(journey.baits[journey.bait]??0)>0,'鱼饵用完了，请补充或换普通面团');
+        let selected: ReturnType<typeof rollEncounter>;
+        try { selected=rollEncounter(seed,castId,action.mode,journey,Object.keys(save.catalog) as SpeciesId[]); }
+        catch (error) { throw new ActionError(error instanceof Error?error.message:'没有匹配的候选'); }
+        if (journey.bait==='B08') journey.invitations=journey.invitations.filter(item=>item!==selected.catch.speciesId);
+        else if (journey.bait!=='B01') journey.baits[journey.bait]!--;
+        consumeOverride(journey);
+        save.active = { id: castId, seed, catch: selected.catch, challenge: selected.challenge, meta:selected.meta,
           owner: clientId, ownerEpoch: 1, leaseUntil: Date.now() + 15000, castRevision: 0, inputCursor: 0,
           paused: false, simulation: initialSimulation() };
         save.lastOutcome = null;
@@ -111,6 +125,7 @@ export class FisherService {
       case 'cast.resume': {
         const cast = save.active;
         requireState(cast && cast.id === id(action.castId), '这一竿已经结束');
+        requireState(cast.simulation.phase!=='recovery','这一竿需要恢复收获');
         cast.owner = clientId; cast.ownerEpoch++; cast.leaseUntil = Date.now() + 15000;
         cast.paused = false; cast.simulation.reel = false; cast.castRevision++;
         break;
@@ -119,17 +134,30 @@ export class FisherService {
         const cast = save.active;
         requireState(cast && cast.id === id(action.castId), '这一竿已经结束');
         requireState(cast.owner === clientId && cast.ownerEpoch === integer(action.ownerEpoch, 1), '请先在这里继续这一竿');
+        requireState(cast.simulation.phase!=='recovery','请先恢复这一竿的收获');
+        if (cast.meta.source==='target') save.journey.baits.B07=Math.min(9999,(save.journey.baits.B07??0)+1);
+        if (cast.meta.source==='invitation'&&!save.journey.invitations.includes(cast.catch.speciesId)) save.journey.invitations.push(cast.catch.speciesId);
         save.active = null; save.lastOutcome = 'cancelled';
+        break;
+      }
+      case 'cast.recover': {
+        const cast=save.active;
+        requireState(cast && cast.id===id(action.castId) && cast.simulation.phase==='recovery','没有需要恢复的收获');
+        requireState(cast.ownerEpoch===integer(action.ownerEpoch,1),'状态已变化，请重新操作');
+        this.completeCatch(save,cast);
         break;
       }
       case 'catch.resolve': {
         const item = save.pending;
         requireState(item && item.id === id(action.catchId), '这份收获已经处理');
         requireState(['keep', 'sell', 'release'].includes(action.choice), '请选择处理方式');
+        if (!isInventorySpecies(item.speciesId)) {
+          requireState(action.choice==='keep','遗物和来客仅可收藏');save.pending=null;break;
+        }
         if (action.choice === 'keep') {
           requireState(save.inventory.length < 240, '背包已满，请先整理');
           save.inventory.push(item);
-        } else this.resolveCatch(save, item, action.choice);
+        } else { this.requireUnprotected(item,action.confirmed);this.resolveCatch(save, item, action.choice); }
         save.pending = null;
         break;
       }
@@ -137,16 +165,77 @@ export class FisherService {
         const index = save.inventory.findIndex(item => item.id === id(action.catchId));
         requireState(index >= 0, '这份收获已经处理');
         requireState(action.choice === 'sell' || action.choice === 'release', '请选择处理方式');
+        this.requireUnprotected(save.inventory[index]!,action.confirmed);
         this.resolveCatch(save, save.inventory[index]!, action.choice);
         save.inventory.splice(index, 1);
         break;
       }
+      case 'inventory.lock': {
+        const item=save.inventory.find(item=>item.id===id(action.catchId));
+        requireState(item && typeof action.locked==='boolean','没有找到这份收获');item.locked=action.locked;break;
+      }
+      case 'inventory.batch': {
+        requireState(Array.isArray(action.catchIds)&&action.catchIds.length>0&&action.catchIds.length<=240
+          &&new Set(action.catchIds).size===action.catchIds.length,'请选择有效的收获数量');
+        requireState(action.choice==='sell'||action.choice==='release','请选择处理方式');
+        const items=action.catchIds.map(catchId=>save.inventory.find(item=>item.id===id(catchId)));
+        for (const item of items) { requireState(item,'有收获已被处理');this.requireUnprotected(item,false); }
+        for (const item of items) this.resolveCatch(save,item!,action.choice);
+        save.inventory=save.inventory.filter(item=>!action.catchIds.includes(item.id));break;
+      }
+      case 'location.select': {
+        requireState(!save.active&&!save.pending,'请先处理这一竿');
+        requireState(isRegionId(action.region)&&regionUnlocked(action.region,save.experience,save.research),'这个钓点还未解锁');
+        save.journey.region=action.region;save.journey.bait='B01';save.journey.target=null;break;
+      }
+      case 'bait.select': {
+        requireState(!save.active&&!save.pending,'请先处理这一竿');requireState(isBaitId(action.bait),'请选择有效鱼饵');
+        requireState(action.target===undefined||isSpeciesId(action.target),'请选择有效目标');
+        save.journey.bait=action.bait;save.journey.target=action.target??null;break;
+      }
+      case 'bait.buy': {
+        requireState(isBaitId(action.bait)&&action.bait!=='B01'&&action.bait!=='B08','这种饵不能购买');
+        const count=integer(action.quantity,1,99),item=bait(action.bait),owned=save.journey.baits[item.id]??0;
+        requireState(owned+count<=9999,'鱼饵库存已满');
+        requireState(save.coins>=item.coins*count&&save.tokens>=item.tokens*count,'壳币或潮汐碎片不足');
+        save.coins-=item.coins*count;save.tokens-=item.tokens*count;save.journey.baits[item.id]=owned+count;break;
+      }
+      case 'gear.buy': {
+        requireState(isGearId(action.gear),'请选择有效鱼具');const item=gear(action.gear);
+        requireState(!save.journey.ownedGear.includes(item.id),'已经拥有这件鱼具');
+        requireState(levelInfo(save.experience).level>=item.level,'手册等级还不够');
+        requireState(save.coins>=item.price,'壳币不足');
+        save.coins-=item.price;save.journey.ownedGear.push(item.id);break;
+      }
+      case 'gear.equip': {
+        requireState(!save.active&&!save.pending,'请先处理这一竿');
+        requireState(isGearId(action.gear)&&save.journey.ownedGear.includes(action.gear),'还没有这件鱼具');
+        const item=gear(action.gear);save.journey.loadout[item.slot]=item.id;break;
+      }
+      case 'tide.choose': {
+        requireState(!save.active&&!save.pending,'请先处理这一竿');requireState(isTide(action.tide),'请选择有效潮相');
+        requireState(!save.journey.tideTrialUsed||save.tokens>=1,'需要 1 枚潮汐碎片');
+        if (save.journey.tideTrialUsed) save.tokens--;else save.journey.tideTrialUsed=true;
+        save.journey.tideOverride={tide:action.tide,remaining:3};break;
+      }
       default: throw new ActionError('未知操作', 400);
     }
   }
+  private requireUnprotected(item:Catch,confirmed:unknown): void {
+    requireState(!item.locked,'请先解锁这份收获');
+    requireState(!(item.isNew||item.isNewVariant||item.isRecord)||confirmed===true,'这是新发现、首次外观或纪录个体，请单独确认');
+  }
+  private award(save:Save,coins=0,tokens=0): void {
+    if (save.coins+coins>9999999 || save.tokens+tokens>99999) save.journey.overflow=true;
+    save.coins=Math.min(9999999,save.coins+coins);save.tokens=Math.min(99999,save.tokens+tokens);
+  }
   private resolveCatch(save: Save, item: Catch, choice: 'sell' | 'release'): void {
-    if (choice === 'sell') save.coins = Math.min(9999999, save.coins + item.price);
-    else { save.released++; if (save.released % 5 === 0) save.tokens = Math.min(99999, save.tokens + 1); }
+    if (choice === 'sell') this.award(save,item.price);
+    else {
+      if (species(item.speciesId).creature) save.released++;
+      save.journey.releaseProgress++;
+      if (save.journey.releaseProgress===5) {save.journey.releaseProgress=0;this.award(save,0,1);}
+    }
   }
   private applyInput(save: Save, request: InputRequest): void {
     const cast = save.active;
@@ -171,18 +260,37 @@ export class FisherService {
       requireState(cast.simulation.phase === 'bite', '还没有咬钩');
       cast.simulation.phase = 'fighting'; cast.simulation.reel = false;
     } else if (request.command === 'pause') { cast.paused = true; cast.simulation.reel = false; }
-    if (cast.simulation.phase === 'caught') {
-      const item = cast.catch;
-      const prior = save.catalog[item.speciesId];
-      item.isNew = !prior;
-      item.isRecord = !!prior && (item.lengthMm > prior.bestLengthMm || item.weightG > prior.bestWeightG);
-      item.caughtAt = new Date().toISOString();
-      save.catalog[item.speciesId] = { count: (prior?.count ?? 0) + 1,
-        bestLengthMm: Math.max(prior?.bestLengthMm ?? 0, item.lengthMm), bestWeightG: Math.max(prior?.bestWeightG ?? 0, item.weightG) };
-      if (!prior) save.research++;
-      save.experience += (item.speciesId === 'A001' ? 12 : 10) + (prior ? 0 : 15);
-      save.pending = item; save.active = null;
-    } else if (cast.simulation.phase === 'escaped') { save.active = null; save.lastOutcome = 'escaped'; save.experience += 2; }
+    if (cast.simulation.phase === 'caught') this.completeCatch(save,cast);
+    else if (cast.simulation.phase === 'escaped') {
+      save.active = null; save.lastOutcome = 'escaped'; save.experience += 2;
+      save.journey.totalEscaped++;finishTide(save.journey,cast.meta.region);
+    } else if (cast.simulation.phase==='recovery') {cast.paused=true;cast.simulation.reel=false;}
+  }
+  private completeCatch(save:Save,cast:PrivateCast): void {
+    const item=cast.catch,def=species(item.speciesId),prior=save.catalog[item.speciesId],journey=save.journey;
+    item.isNew=!prior;
+    item.isRecord=!!prior&&item.lengthMm!==null&&item.weightG!==null
+      &&(item.lengthMm>(prior.bestLengthMm??0)||item.weightG>(prior.bestWeightG??0));
+    item.isNewVariant=item.variant!==null&&!prior?.variants[item.variant];item.caughtAt=new Date().toISOString();
+    const variants={...prior?.variants};if (item.variant) variants[item.variant]=(variants[item.variant]??0)+1;
+    save.catalog[item.speciesId]={count:(prior?.count??0)+1,
+      bestLengthMm:item.lengthMm===null?null:Math.max(prior?.bestLengthMm??0,item.lengthMm),
+      bestWeightG:item.weightG===null?null:Math.max(prior?.bestWeightG??0,item.weightG),variants};
+    if (item.isNew && def.kind!=='guest') save.research++;
+    const base=def.kind==='fish'?10:def.kind==='abstract'?12:0;
+    const bonus=cast.challenge.mode==='standard'&&(cast.simulation.peakDanger??0)<200000?Math.floor(base*.1):0;
+    save.experience+=base+bonus+(item.isNew&&def.kind!=='guest'?15:0);
+    if (def.kind==='relic'&&!item.isNew) this.award(save,0,2);
+    if (item.isNew) journey.dryStreak[item.region]=0;
+    else if (cast.meta.source==='random'||cast.meta.source==='pity'||cast.meta.source==='legacy') journey.dryStreak[item.region]=Math.min(8,journey.dryStreak[item.region]+1);
+    if (def.creature) {
+      journey.variantStreak=item.variant==='original'?Math.min(39,journey.variantStreak+1):0;
+      if (item.quality!<100) journey.miniCaught++;
+      if (prior && item.lengthMm!>prior.bestLengthMm!) journey.lengthRecords++;
+    }
+    journey.totalCaught++;journey.tutorialDone=true;finishTide(journey,cast.meta.region);
+    save.pending=item;save.active=null;
+    if (cast.meta.source==='target'||cast.meta.source==='invitation') {journey.bait='B01';journey.target=null;}
   }
   private notify(): void { for (const listener of this.listeners) { try { listener(); } catch { /* A closed subscriber cannot roll back a save. */ } } }
   async close(): Promise<void> { this.stopped = true; await this.tail; this.listeners.clear(); await this.store.close(); }
