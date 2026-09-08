@@ -71,7 +71,7 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
         : { type: 'inventory.resolve', catchId: item.id, choice: choice === 'keep' ? 'sell' : choice });
     };
     const reelUp = () => { if (!toggle) controller.setReel(false); };
-    const changeTab = (next: typeof tab) => { controller.pause(); setTab(next); setConfirm(null); setCancelConfirm(false); };
+    const changeTab = (next: typeof tab) => { controller.pause(); setTab(next); setConfirm(null); setCancelConfirm(false); root.current?.closest('.dsh-fisher-body')?.scrollTo({top:0}); };
     const mood = pending ? '今天的海，回了一封信' : view.paused && cast ? '这一竿，等你回来' : phase === 'bite' ? '浮漂动了 · 现在提竿'
       : phase === 'fighting' ? warning(sim!, cast!.challenge) : phase === 'casting' ? '轻轻把线送出去' : phase === 'waiting' ? '等一阵涟漪' : '留一点时间给风，也给自己。';
     return <div className="dsh-fisher-game" ref={root}>
@@ -131,7 +131,7 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
         <div className="dsh-fisher-actions">{REGIONS.map(item=><button key={item.id} aria-pressed={catalogRegion===item.id} onClick={()=>setCatalogRegion(item.id)}>{item.name}</button>)}</div><input aria-label="搜索图鉴" placeholder="搜索已发现的名字" value={search} onChange={event=>setSearch(event.target.value)}/></div>
         {SPECIES.filter(entry=>entry.region===catalogRegion&&(!search||(data?.catalog[entry.id]&&entry.name.includes(search)))).map(entry => { const record = data?.catalog[entry.id];const clue=(data?.journey.completed[entry.region]??0)>=10&&entry.kind!=='guest'; return <article className="dsh-fisher-entry" key={entry.id}>
           {record ? <FishArt id={entry.id} /> : <div className="dsh-fisher-undiscovered" aria-label="尚未发现">?</div>}
-          <div><small>{entry.id} · {entry.kind==='relic'?'海岸遗物':entry.kind==='guest'?'海岸来客':entry.kind==='abstract'?(entry.creature?'奇妙生物':'抽象奇物'):'水中居民'}</small><h3>{record||clue ? entry.name : '尚未相遇'}</h3>
+          <div><small>{entry.id} · {entry.kind==='relic'?'海岸遗物':entry.kind==='guest'?'海岸来客':entry.kind==='abstract'?'奇珍异兽':'水中居民'}</small><h3>{record||clue ? entry.name : '尚未相遇'}</h3>
             {record ? <><p>{entry.description}</p><small>相遇 {record.count} 次{record.bestLengthMm!==null?` · 最长 ${(record.bestLengthMm/10).toFixed(1)} cm · 最重 ${record.bestWeightG} g`:''}</small><small>{Object.entries(record.variants).map(([variant,count])=>`${VARIANT_NAMES[variant as Variant]} ${count}`).join(' · ')}</small></> : <p>{entry.kind==='guest'?'完成这片海岸的来客请求，就能寄出邀请。':clue?`线索：在${region(entry.region).name}使用${entry.tags.includes('glow')?'夜光饵':entry.tags.includes('grain')?'谷香饵':entry.tags.includes('marine')?'海盐饵':entry.tags.includes('deep')?'深潜饵':entry.kind==='abstract'?'怪味饵':'普通面团'}，或选择图鉴定向饵。`:'从一圈涟漪开始认识。本区完成 10 竿后公开线索。'}</p>}</div>
         </article>; })}</section>}
       {tab === 'inventory' && <section className="dsh-fisher-collection" aria-label="收获背包"><div className="dsh-fisher-collection-intro"><h3>带回来的小小纪念</h3>

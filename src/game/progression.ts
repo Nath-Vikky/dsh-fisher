@@ -9,7 +9,7 @@ export const BAITS: readonly Bait[] = [
   {id:'B02',name:'谷香饵',coins:10,tokens:0,tag:'grain',description:'同稀有层内偏好谷香的鱼权重翻倍。'},
   {id:'B03',name:'海盐饵',coins:10,tokens:0,tag:'marine',description:'同稀有层内偏好海盐的鱼权重翻倍。'},
   {id:'B04',name:'夜光饵',coins:15,tokens:0,tag:'glow',description:'同稀有层内偏好光亮的鱼权重翻倍。'},
-  {id:'B05',name:'怪味饵',coins:15,tokens:0,tag:null,description:'抽象产物类别权重翻倍。'},
+  {id:'B05',name:'怪味饵',coins:15,tokens:0,tag:null,description:'奇珍异兽类别权重翻倍。'},
   {id:'B06',name:'深潜饵',coins:20,tokens:0,tag:'deep',description:'深潜偏好权重翻倍，遗物类别权重增加 25%。'},
   {id:'B07',name:'图鉴定向饵',coins:60,tokens:2,tag:null,description:'指定本区已公开线索的未发现条目，引导你收获。'},
   {id:'B08',name:'来客邀请饵',coins:0,tokens:0,tag:null,description:'完成来客请求后获得，邀请指定的来客。'},

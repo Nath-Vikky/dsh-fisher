@@ -3,7 +3,8 @@ import type { RegionId, SpeciesId, Variant } from './game/content.ts';
 import type { BaitId, Journey, Tide } from './game/progression.ts';
 import type { GearId } from './game/gear.ts';
 import type { EncounterMeta } from './game/encounters.ts';
-export const VERSION = '0.1.0-dev.4';
+import type { SupplyBait, WorkView } from './game/work.ts';
+export const VERSION = '0.1.0-dev.5';
 export const API = '/api/dsh-fisher/v1';
 export const COAST_ASSET = `${API}/assets/coast-pixel-ink-v1.png`;
 
@@ -16,7 +17,7 @@ export interface Bootstrap {
   protocolVersion: 1; version: string; generation: string; revision: number; saveId: string;
   gameplayAvailable: boolean; issue: string | null; coins: number; tokens: number; research: number;
   experience: number; released: number; inventory: Catch[]; catalog: Partial<Record<SpeciesId, RecordEntry>>;
-  journey: Journey;
+  journey: Journey; work: WorkView;
   active: ActiveCast | null; pending: Catch | null; lastOutcome: 'escaped' | 'cancelled' | null;
 }
 export type Action =
@@ -34,6 +35,8 @@ export type Action =
   | { type: 'gear.buy'; gear: GearId }
   | { type: 'gear.equip'; gear: GearId }
   | { type: 'tide.choose'; tide: Tide }
+  | { type: 'work.enable'; enabled: boolean }
+  | { type: 'work.claim'; packId: string; bait: SupplyBait }
   | { type: 'save.retry' };
 export interface Envelope {
   protocolVersion: 1; actionId: string; clientId: string; saveId: string; generation: string; expectedRevision: number;
@@ -54,5 +57,5 @@ export function isBootstrap(value: unknown): value is Bootstrap {
   const data = value as Record<string, unknown>;
   return data.protocolVersion === 1 && typeof data.version === 'string' && typeof data.generation === 'string'
     && typeof data.saveId === 'string' && Number.isSafeInteger(data.revision) && typeof data.gameplayAvailable === 'boolean'
-    && Number.isSafeInteger(data.coins) && Array.isArray(data.inventory) && !!data.catalog && !!data.journey && 'active' in data && 'pending' in data;
+    && Number.isSafeInteger(data.coins) && Array.isArray(data.inventory) && !!data.catalog && !!data.journey && !!data.work && 'active' in data && 'pending' in data;
 }

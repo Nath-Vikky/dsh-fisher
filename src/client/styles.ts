@@ -29,7 +29,7 @@ export const styles = `
 .dsh-fisher-settings label{display:flex;align-items:center;gap:8px}
 .dsh-fisher-settings input[type=number]{background:var(--fisher-raised);border:1px solid var(--fisher-ink);border-radius:1px;padding:7px;width:90px;color:var(--fisher-ink);font:inherit}
 .dsh-fisher-settings input[type=checkbox]{accent-color:#39676b;width:16px;height:16px}
-.dsh-fisher-game{min-height:100%;display:flex;flex-direction:column;padding:12px;gap:11px}
+.dsh-fisher-game{min-height:100%;flex-shrink:0;display:flex;flex-direction:column;padding:12px;gap:11px}
 .dsh-fisher-location{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-shrink:0;padding:0 3px}
 .dsh-fisher-location h2{font-size:18px;line-height:1.35;margin:0;font-weight:600;letter-spacing:.12em}
 .dsh-fisher-location small{display:block;font-size:10px;letter-spacing:.12em;color:var(--fisher-muted)}
@@ -55,7 +55,7 @@ export const styles = `
 .dsh-fisher-wallet{text-align:right;font-size:12px;white-space:nowrap}
 .dsh-fisher-wallet b{font:600 20px/1.2 ui-monospace,monospace;margin-left:5px}
 .dsh-fisher-wallet small{display:block;font-size:10px;color:var(--fisher-muted)}
-.dsh-fisher-tabs{display:flex;border:1px solid var(--fisher-ink);background:var(--fisher-raised);flex-shrink:0}
+.dsh-fisher-tabs{position:sticky;top:0;z-index:3;display:flex;border:1px solid var(--fisher-ink);background:var(--fisher-raised);flex-shrink:0}
 .dsh-fisher-tabs button{flex:1;border:0;border-right:1px solid var(--fisher-ink);border-radius:0;box-shadow:none;padding:7px 4px;font-size:12px}
 .dsh-fisher-tabs button:last-child{border-right:0}
 .dsh-fisher-tabs button[aria-current=page]{background:var(--fisher-sea);box-shadow:inset 0 -3px 0 var(--fisher-ink)}
@@ -123,6 +123,8 @@ export const styles = `
 .dsh-fisher-harbor select,.dsh-fisher-collection input{min-width:0;max-width:100%;padding:7px 5px;font:11px inherit;color:var(--fisher-ink);background:var(--fisher-paper);border:1px solid var(--fisher-ink)}
 .dsh-fisher-harbor select{flex:1;font-size:11px}
 .dsh-fisher-collection input{box-sizing:border-box;width:100%;margin-top:10px;font-size:12px}
+.dsh-fisher-harbor label.dsh-fisher-toggle{display:flex;align-items:center;gap:7px}
+.dsh-fisher-collection input[type=checkbox]{width:14px;height:14px;flex-shrink:0;margin:0}
 .dsh-fisher-harbor details{margin-top:10px;border-top:1px solid #293f4633;padding-top:8px}
 .dsh-fisher-harbor summary{font-size:11px;cursor:pointer;line-height:1.6}
 .dsh-fisher-shop-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px dashed #293f4633;font-size:12px}

@@ -12,6 +12,11 @@ import type { ActionRequest, Bootstrap, Envelope, InputRequest, MutationResult }
 import { emptySave, id, integer, object, validateSave } from './model.ts';
 import type { PrivateCast, Save } from './model.ts';
 import { SaveStore } from './store.ts';
+import { SUPPLY_BAITS, workView } from '../game/work.ts';
+import { emptyWorkRuntime, observeWork, settleWork } from './work-runtime.ts';
+import type { WorkEvent, WorkRuntime, WorkTime } from './work-runtime.ts';
+
+export const workClock = (): WorkTime => ({ wall: Date.now(), mono: Math.floor(performance.now()) });
 
 export class ActionError extends Error {
   readonly status: number;
@@ -38,8 +43,13 @@ export class FisherService {
   private stopped = false;
   private writeError = false;
   private readonly listeners = new Set<() => void>();
+  private runtime: WorkRuntime;
+  private pendingWork: WorkEvent[] = [];
+  private workTimer: ReturnType<typeof setTimeout> | undefined;
+  private epoch = 0;
+  private readonly clock: () => WorkTime;
   readonly store: SaveStore;
-  constructor(store = new SaveStore()) { this.store = store; }
+  constructor(store = new SaveStore(), clock = workClock) { this.store = store; this.clock = clock; this.runtime = emptyWorkRuntime(clock()); }
   async initialize(): Promise<void> { verifyContent();this.save = await this.store.load(); }
   subscribe(listener: () => void): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   snapshot(): Bootstrap {
@@ -49,10 +59,60 @@ export class FisherService {
       issue: this.store.issue ?? (this.writeError ? '保存没有完成，已暂停；请重试保存' : null),
       coins: this.save.coins, tokens: this.save.tokens, research: this.save.research, experience: this.save.experience,
       released: this.save.released, inventory: this.save.inventory, catalog: this.save.catalog, journey:this.save.journey,
+      work: workView(this.save.work, this.clock().wall),
       active: active ? { id: active.id, owner: active.owner, ownerEpoch: active.ownerEpoch, leaseUntil: active.leaseUntil,
         castRevision: active.castRevision, inputCursor: active.inputCursor, paused: active.paused,
         challenge: active.challenge, simulation: active.simulation,setup:active.meta } : null,
       pending: this.save.pending, lastOutcome: this.save.lastOutcome });
+  }
+  get observingWork(): boolean { return this.save.work.enabled && !this.stopped && !this.writeError && !this.store.issue; }
+  get workEpoch(): number { return this.epoch; }
+  observe(event: WorkEvent, epoch: number): void {
+    if (!this.observingWork || epoch !== this.epoch) return;
+    if (this.pendingWork.length >= 256) {
+      if (event.kind === 'activity') return;
+      const replace = this.pendingWork.findIndex(item => item.kind === 'activity');
+      if (replace < 0) return;
+      this.pendingWork.splice(replace, 1);
+    }
+    this.pendingWork.push(event);
+    if (this.workTimer === undefined) {
+      this.workTimer = setTimeout(() => { this.workTimer = undefined; void this.flushWork(); }, 5000);
+      this.workTimer.unref();
+    }
+  }
+  private prepareWork(save: Save, at: WorkTime): { runtime: WorkRuntime; consumed: number } {
+    const runtime = structuredClone(this.runtime), consumed = this.pendingWork.length;
+    for (const event of this.pendingWork) observeWork(save.work, runtime, event, randomUUID);
+    settleWork(save.work, runtime, at, randomUUID);
+    return { runtime, consumed };
+  }
+  private commitWork(prepared: { runtime: WorkRuntime; consumed: number }, reset = false, at = this.clock()): void {
+    this.pendingWork.splice(0, prepared.consumed);
+    this.runtime = prepared.runtime;
+    if (reset) this.resetObservation(at);
+    if (!this.pendingWork.length && this.workTimer !== undefined) { clearTimeout(this.workTimer); this.workTimer = undefined; }
+  }
+  private resetObservation(at = this.clock()): void {
+    this.epoch++; this.pendingWork = []; this.runtime = emptyWorkRuntime(at);
+    if (this.workTimer !== undefined) clearTimeout(this.workTimer);
+    this.workTimer = undefined;
+  }
+  flushWork(): Promise<void> {
+    if (!this.observingWork || this.queued >= 256) return Promise.resolve();
+    this.queued++;
+    const job = this.tail.then(() => this.persistWork(this.clock())).finally(() => { this.queued--; });
+    this.tail = job.catch(() => {}); return job;
+  }
+  private async persistWork(at: WorkTime): Promise<void> {
+    if (this.store.issue || this.writeError || !this.save.work.enabled) return;
+    const next = structuredClone(this.save), prepared = this.prepareWork(next, at);
+    if (JSON.stringify(next.work) !== JSON.stringify(this.save.work)) {
+      next.revision++; validateSave(next);
+      try { await this.store.write(next); }
+      catch { this.writeError = true; this.resetObservation(); this.notify(); return; }
+      this.save = next; this.commitWork(prepared); this.notify();
+    } else this.commitWork(prepared);
   }
   mutate(value: unknown, input: boolean): Promise<MutationResult> {
     if (this.queued >= 256) return Promise.reject(new ActionError('保存队列繁忙，请稍后重试', 429));
@@ -82,6 +142,7 @@ export class FisherService {
     requireState(!this.writeError, '保存没有完成，请先重试保存');
     if (!input) requireState(value.expectedRevision === this.save.revision, '状态已更新，请重新操作');
     const next = structuredClone(this.save);
+    const at = this.clock(), prepared = this.prepareWork(next, at), wasEnabled = this.save.work.enabled;
     try {
       if (input) this.applyInput(next, value as InputRequest);
       else this.applyAction(next, request);
@@ -94,8 +155,9 @@ export class FisherService {
     next.receipts = next.receipts.slice(-128);
     validateSave(next);
     try { await this.store.write(next); }
-    catch { this.writeError = true; this.notify(); throw new ActionError('保存没有完成，收入与收获尚未结算', 503); }
+    catch { this.writeError = true; this.resetObservation(); this.notify(); throw new ActionError('保存没有完成，收入与收获尚未结算', 503); }
     this.save = next;
+    this.commitWork(prepared, wasEnabled !== next.work.enabled, at);
     this.notify();
     return { snapshot: this.snapshot(), appliedRevision: next.revision, duplicate: false };
   }
@@ -218,6 +280,19 @@ export class FisherService {
         if (save.journey.tideTrialUsed) save.tokens--;else save.journey.tideTrialUsed=true;
         save.journey.tideOverride={tide:action.tide,remaining:3};break;
       }
+      case 'work.enable': {
+        requireState(typeof action.enabled === 'boolean', '请选择工作补给状态');
+        save.work.enabled = action.enabled; break;
+      }
+      case 'work.claim': {
+        const index = save.work.packs.indexOf(id(action.packId));
+        requireState(index >= 0, '这份补给已经领取');
+        requireState(SUPPLY_BAITS.some(bait => bait === action.bait), '请选择补给鱼饵');
+        const stock = save.journey.baits[action.bait] ?? 0;
+        requireState(stock <= 9997, '这种鱼饵的库存已满，请换一种');
+        save.work.packs.splice(index, 1); save.journey.baits[action.bait] = stock + 2;
+        this.award(save, 20, 1); break;
+      }
       default: throw new ActionError('未知操作', 400);
     }
   }
@@ -293,5 +368,12 @@ export class FisherService {
     if (cast.meta.source==='target'||cast.meta.source==='invitation') {journey.bait='B01';journey.target=null;}
   }
   private notify(): void { for (const listener of this.listeners) { try { listener(); } catch { /* A closed subscriber cannot roll back a save. */ } } }
-  async close(): Promise<void> { this.stopped = true; await this.tail; this.listeners.clear(); await this.store.close(); }
+  async close(): Promise<void> {
+    if (this.stopped) return;
+    const at = this.clock(); this.stopped = true;
+    if (this.workTimer !== undefined) clearTimeout(this.workTimer);
+    this.workTimer = undefined;
+    await this.tail; await this.persistWork(at); this.resetObservation(at);
+    this.listeners.clear(); await this.store.close();
+  }
 }

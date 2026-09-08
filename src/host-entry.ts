@@ -3,15 +3,17 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Context } from '@deepseek-ai/cordis';
 import type { HostConnectionHandle } from '@deepseek-ai/dsh-client-connection';
 import type { WebServer } from '@deepseek-ai/dsh-host-webserver';
+import type { SessionStore } from '@deepseek-ai/dsh-session';
 import { API, COAST_ASSET } from './protocol.ts';
 import { SPRITES } from './game/content.ts';
 import { GEAR_ART } from './game/gear.ts';
-import { ActionError, FisherService } from './host/service.ts';
+import { ActionError, FisherService, workClock } from './host/service.ts';
+import { WorkAdapter } from './host/work-adapter.ts';
 
 export const name = 'dsh-fisher';
-export const inject = ['webServer', 'connection'];
+export const inject = ['webServer', 'connection', 'sessions'];
 
-type HostContext = Context & { webServer: WebServer; connection: HostConnectionHandle };
+type HostContext = Context & { webServer: WebServer; connection: HostConnectionHandle; sessions: SessionStore };
 
 export function apply(ctx: HostContext): void {
   if (typeof ctx.connection.requestRejection !== 'function') {
@@ -26,6 +28,20 @@ export function apply(ctx: HostContext): void {
     const streams = new Map<ServerResponse, IncomingMessage>();
     let heartbeat: ReturnType<typeof setInterval> | undefined;
     let disposed = false;
+    let observation: { epoch: number; dispose: () => void } | undefined;
+    const syncObservation = () => {
+      if (observation && (disposed || !service.observingWork || observation.epoch !== service.workEpoch)) {
+        observation.dispose(); observation = undefined;
+      }
+      if (!observation && !disposed && service.observingWork) {
+        const epoch = service.workEpoch;
+        const adapter = new WorkAdapter(ctx.sessions, event => service.observe(event, epoch), workClock);
+        const stopEvents = ctx.on('session/event', (session, event) => adapter.observe(session, event));
+        const stopDisposed = ctx.on('session/disposed', session => adapter.dispose(session));
+        observation = { epoch, dispose: () => { stopEvents(); stopDisposed(); } };
+      }
+    };
+    void ready.then(syncObservation).catch(() => {});
     const assets = new Map<string, { file: URL; contentType: string; cacheControl: string; buffer?: Promise<Buffer> }>([
       [`${API}/client/game.js`, { file: new URL('./game.js', import.meta.url),
         contentType: 'text/javascript; charset=utf-8', cacheControl: 'no-store' }],
@@ -41,6 +57,7 @@ export function apply(ctx: HostContext): void {
       return `event: revision\ndata: ${JSON.stringify({ generation: state.generation, revision: state.revision, gameplayAvailable: state.gameplayAvailable })}\n\n`;
     };
     const unsubscribe = service.subscribe(() => {
+      syncObservation();
       for (const [stream, request] of streams) {
         if (ctx.connection.requestRejection(request) !== undefined || stream.destroyed || !stream.write(revisionEvent())) {
           stream.end(); streams.delete(stream);
@@ -54,6 +71,7 @@ export function apply(ctx: HostContext): void {
     };
     const close = () => {
       disposed = true;
+      syncObservation();
       stopHeartbeat();
       for (const response of streams.keys()) response.end();
       streams.clear();

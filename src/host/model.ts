@@ -8,19 +8,21 @@ import type { EncounterMeta } from '../game/encounters.ts';
 import { catchBoundsValid } from '../game/engine.ts';
 import type { Catch } from '../game/engine.ts';
 import type { ActiveCast, Bootstrap } from '../protocol.ts';
+import { emptyWork } from '../game/work.ts';
+import type { WorkState } from '../game/work.ts';
 
 export interface PrivateCast extends ActiveCast { seed: number; catch: Catch; meta: EncounterMeta }
 export interface Receipt { id: string; fingerprint: string; revision: number }
 export interface Save {
-  formatVersion: 2; rulesVersion: 2; contentVersion: 2; id: string; revision: number;
+  formatVersion: 3; rulesVersion: 2; contentVersion: 2; id: string; revision: number;
   coins: number; tokens: number; research: number; experience: number; released: number;
   inventory: Catch[]; catalog: Bootstrap['catalog']; active: PrivateCast | null; pending: Catch | null;
-  lastOutcome: Bootstrap['lastOutcome']; receipts: Receipt[]; journey: Journey;
+  lastOutcome: Bootstrap['lastOutcome']; receipts: Receipt[]; journey: Journey; work: WorkState;
 }
 export function emptySave(): Save {
-  return { formatVersion: 2, rulesVersion: 2, contentVersion: 2, id: randomUUID(), revision: 0,
+  return { formatVersion: 3, rulesVersion: 2, contentVersion: 2, id: randomUUID(), revision: 0,
     coins: 100, tokens: 0, research: 0, experience: 0, released: 0, inventory: [], catalog: {},
-    active: null, pending: null, lastOutcome: null, receipts: [], journey:emptyJourney() };
+    active: null, pending: null, lastOutcome: null, receipts: [], journey:emptyJourney(), work:emptyWork() };
 }
 export function object(value: unknown): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('Expected object');
@@ -50,7 +52,7 @@ function validCatch(value: unknown, complete = true): asserts value is Catch {
 }
 export function validateSave(value: unknown): asserts value is Save {
   const data = object(value);
-  if (data.formatVersion !== 2 || data.rulesVersion !== 2 || data.contentVersion !== 2) throw new Error('UNSUPPORTED_SAVE_VERSION');
+  if (data.formatVersion !== 3 || data.rulesVersion !== 2 || data.contentVersion !== 2) throw new Error('UNSUPPORTED_SAVE_VERSION');
   id(data.id); integer(data.revision); integer(data.coins, 0, 9999999); integer(data.tokens, 0, 99999);
   integer(data.research); integer(data.experience); integer(data.released);
   if (!Array.isArray(data.inventory) || data.inventory.length > 240) throw new Error('Invalid inventory');
@@ -111,6 +113,26 @@ export function validateSave(value: unknown): asserts value is Save {
     if (typeof receipt.fingerprint !== 'string' || !/^[0-9a-f]{64}$/.test(receipt.fingerprint)) throw new Error('Invalid receipt');
   }
   validateJourney(data.journey);
+  validateWork(data.work);
+}
+
+function validateWork(value: unknown): void {
+  const work = object(value);
+  boolean(work.enabled); integer(work.day, 0, 100000000);
+  integer(work.points, 0, 9); integer(work.dailyPoints, 0, 120); integer(work.activeMs, 0, 179999);
+  if (work.lastCompletionAt !== null) integer(work.lastCompletionAt, 0, 8640000000000000);
+  if (!Array.isArray(work.packs) || work.packs.length > 12 || new Set(work.packs).size !== work.packs.length) throw new Error('Invalid supplies');
+  for (const pack of work.packs) id(pack);
+  const digest = (value: unknown) => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+  if (!Array.isArray(work.ends) || work.ends.length > 128 || work.ends.some(value => !digest(value))
+    || new Set(work.ends).size !== work.ends.length) throw new Error('Invalid work ledger');
+  if (!Array.isArray(work.cursors) || work.cursors.length > 128) throw new Error('Invalid work cursors');
+  const sessions = new Set<string>();
+  for (const entry of work.cursors) {
+    const cursor = object(entry);
+    if (!digest(cursor.session) || sessions.has(cursor.session as string)) throw new Error('Invalid work cursor');
+    sessions.add(cursor.session as string); integer(cursor.seq); integer(cursor.turn); boolean(cursor.ended); integer(cursor.activeMs, 0, 1200000);
+  }
 }
 
 function validateJourney(value:unknown): void {
@@ -141,7 +163,10 @@ function validateJourney(value:unknown): void {
 
 export function upgradeSave(value:unknown): Save {
   const data=structuredClone(object(value));
-  if (data.formatVersion===2) { validateSave(data);return data; }
+  if (data.formatVersion===3) { validateSave(data);return data; }
+  if (data.formatVersion===2 && data.rulesVersion===2 && data.contentVersion===2) {
+    data.formatVersion=3;data.work=emptyWork();validateSave(data);return data;
+  }
   if (data.formatVersion!==1||data.rulesVersion!==1||data.contentVersion!==1) throw new Error('UNSUPPORTED_SAVE_VERSION');
   const legacyIds:SpeciesId[]=['F001','F002','F003','A001'];
   const adaptCatch=(value:unknown) => {
@@ -169,6 +194,6 @@ export function upgradeSave(value:unknown): Save {
     cast.catch=adaptCatch(cast.catch);
     cast.meta={source:'legacy',region:'L01',bait:'B01',tide:'calm'};
   }
-  data.formatVersion=2;data.rulesVersion=2;data.contentVersion=2;data.journey=journey;
+  data.formatVersion=3;data.rulesVersion=2;data.contentVersion=2;data.journey=journey;data.work=emptyWork();
   validateSave(data);return data;
 }

@@ -26,7 +26,7 @@ async function readSave(path: string): Promise<Save> {
   if ((await stat(path)).size > MAX_BYTES) throw new Error('SAVE_TOO_LARGE');
   const wrapper = object(JSON.parse(await readFile(path, 'utf8')));
   const version=object(wrapper.save).formatVersion;
-  if (version!==1 && version!==2) throw new Error('UNSUPPORTED_SAVE_VERSION');
+  if (version!==1 && version!==2 && version!==3) throw new Error('UNSUPPORTED_SAVE_VERSION');
   if (wrapper.checksum !== digest(JSON.stringify(wrapper.save))) throw new Error('SAVE_CHECKSUM_MISMATCH');
   return upgradeSave(wrapper.save);
 }
@@ -75,12 +75,14 @@ export class SaveStore {
     try {
       const save = await readSave(join(this.directory, 'save.json'));
       const original=await readFile(join(this.directory,'save.json'),'utf8');
-      if (!this.issue && object(object(JSON.parse(original)).save).formatVersion===1) {
+      const sourceVersion=object(object(JSON.parse(original)).save).formatVersion;
+      if (!this.issue && (sourceVersion===1 || sourceVersion===2)) {
+        const backupPath=join(this.directory,sourceVersion===1?'save.before-v2.json':'save.before-v3.json');
         try {
-          const backup=await open(join(this.directory,'save.before-v2.json'),'wx',0o600);
+          const backup=await open(backupPath,'wx',0o600);
           try { await backup.writeFile(original,'utf8');await backup.sync(); } finally { await backup.close(); }
         } catch (error) {
-          const existing=errorCode(error)==='EEXIST'?await readFile(join(this.directory,'save.before-v2.json'),'utf8').catch(()=>null):null;
+          const existing=errorCode(error)==='EEXIST'?await readFile(backupPath,'utf8').catch(()=>null):null;
           if (existing!==original) this.issue='旧存档备份未完成或不一致，已暂停升级';
         }
       }
