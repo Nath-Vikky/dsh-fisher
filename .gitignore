@@ -1,0 +1,36 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+*.tgz
+
+.env
+.env.*
+!.env.example
+*.log
+
+/tmp/
+/test-results/
+/playwright-report/
+/.dsh-home/
+/.test-dsh-home/
+/dsh-home/
+/fishersave/
+
+.DS_Store
+Thumbs.db
+
+# Documents stay local unless explicitly allowed as neutral user-facing files.
+*.md
+!/README.md
+!/README.zh.md
+!/README.en.md
+!/.github/pull_request_template.md
+
+# Internal material and its local maintenance tools must never be pushed.
+/dsh-*-plan-*/
+/internal/
+/internal-docs/
+/docs/internal/
+/reports/
+/tools/build-plan.mjs
