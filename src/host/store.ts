@@ -26,7 +26,7 @@ async function readSave(path: string): Promise<Save> {
   if ((await stat(path)).size > MAX_BYTES) throw new Error('SAVE_TOO_LARGE');
   const wrapper = object(JSON.parse(await readFile(path, 'utf8')));
   const version=object(wrapper.save).formatVersion;
-  if (version!==1 && version!==2 && version!==3) throw new Error('UNSUPPORTED_SAVE_VERSION');
+  if (version!==1 && version!==2 && version!==3 && version!==4) throw new Error('UNSUPPORTED_SAVE_VERSION');
   if (wrapper.checksum !== digest(JSON.stringify(wrapper.save))) throw new Error('SAVE_CHECKSUM_MISMATCH');
   return upgradeSave(wrapper.save);
 }
@@ -76,8 +76,8 @@ export class SaveStore {
       const save = await readSave(join(this.directory, 'save.json'));
       const original=await readFile(join(this.directory,'save.json'),'utf8');
       const sourceVersion=object(object(JSON.parse(original)).save).formatVersion;
-      if (!this.issue && (sourceVersion===1 || sourceVersion===2)) {
-        const backupPath=join(this.directory,sourceVersion===1?'save.before-v2.json':'save.before-v3.json');
+      if (!this.issue && (sourceVersion===1 || sourceVersion===2 || sourceVersion===3)) {
+        const backupPath=join(this.directory,`save.before-v${sourceVersion+1}.json`);
         try {
           const backup=await open(backupPath,'wx',0o600);
           try { await backup.writeFile(original,'utf8');await backup.sync(); } finally { await backup.close(); }

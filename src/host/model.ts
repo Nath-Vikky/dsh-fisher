@@ -10,31 +10,25 @@ import type { Catch } from '../game/engine.ts';
 import type { ActiveCast, Bootstrap } from '../protocol.ts';
 import { emptyWork } from '../game/work.ts';
 import type { WorkState } from '../game/work.ts';
+import { emptyLife, migrateLife, refreshLife } from '../game/life.ts';
+import type { LifeState } from '../game/life.ts';
+import { validateLife } from './life-validation.ts';
+import { object, integer, id } from './validation.ts';
+export { object, integer, id } from './validation.ts';
 
 export interface PrivateCast extends ActiveCast { seed: number; catch: Catch; meta: EncounterMeta }
 export interface Receipt { id: string; fingerprint: string; revision: number }
 export interface Save {
-  formatVersion: 3; rulesVersion: 2; contentVersion: 2; id: string; revision: number;
+  formatVersion: 4; rulesVersion: 2; contentVersion: 2; id: string; revision: number;
   coins: number; tokens: number; research: number; experience: number; released: number;
   inventory: Catch[]; catalog: Bootstrap['catalog']; active: PrivateCast | null; pending: Catch | null;
-  lastOutcome: Bootstrap['lastOutcome']; receipts: Receipt[]; journey: Journey; work: WorkState;
+  lastOutcome: Bootstrap['lastOutcome']; receipts: Receipt[]; journey: Journey; work: WorkState; life: LifeState;
 }
 export function emptySave(): Save {
-  return { formatVersion: 3, rulesVersion: 2, contentVersion: 2, id: randomUUID(), revision: 0,
+  const save:Save={ formatVersion: 4, rulesVersion: 2, contentVersion: 2, id: randomUUID(), revision: 0,
     coins: 100, tokens: 0, research: 0, experience: 0, released: 0, inventory: [], catalog: {},
-    active: null, pending: null, lastOutcome: null, receipts: [], journey:emptyJourney(), work:emptyWork() };
-}
-export function object(value: unknown): Record<string, unknown> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('Expected object');
-  return value as Record<string, unknown>;
-}
-export function integer(value: unknown, min = 0, max = 2147483647): number {
-  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < min || value > max) throw new Error('Invalid integer');
-  return value;
-}
-export function id(value: unknown): string {
-  if (typeof value !== 'string' || !/^[a-zA-Z0-9-]{1,80}$/.test(value)) throw new Error('Invalid identifier');
-  return value;
+    active: null, pending: null, lastOutcome: null, receipts: [], journey:emptyJourney(), work:emptyWork(),life:emptyLife() };
+  refreshLife(save);return save;
 }
 function boolean(value: unknown): void { if (typeof value !== 'boolean') throw new Error('Invalid boolean'); }
 function validCatch(value: unknown, complete = true): asserts value is Catch {
@@ -47,12 +41,13 @@ function validCatch(value: unknown, complete = true): asserts value is Catch {
   }
   integer(item.price, 0, 1000);
   boolean(item.isNew); boolean(item.isRecord); boolean(item.isNewVariant); boolean(item.locked);
+  if(item.order!==undefined)integer(item.order,1);
   if (typeof item.caughtAt !== 'string' || (complete ? !Number.isFinite(Date.parse(item.caughtAt)) : item.caughtAt !== '')) throw new Error('Invalid date');
   if (!catchBoundsValid(value as Catch)) throw new Error('Invalid catch bounds');
 }
 export function validateSave(value: unknown): asserts value is Save {
   const data = object(value);
-  if (data.formatVersion !== 3 || data.rulesVersion !== 2 || data.contentVersion !== 2) throw new Error('UNSUPPORTED_SAVE_VERSION');
+  if (data.formatVersion !== 4 || data.rulesVersion !== 2 || data.contentVersion !== 2) throw new Error('UNSUPPORTED_SAVE_VERSION');
   id(data.id); integer(data.revision); integer(data.coins, 0, 9999999); integer(data.tokens, 0, 99999);
   integer(data.research); integer(data.experience); integer(data.released);
   if (!Array.isArray(data.inventory) || data.inventory.length > 240) throw new Error('Invalid inventory');
@@ -114,6 +109,9 @@ export function validateSave(value: unknown): asserts value is Save {
   }
   validateJourney(data.journey);
   validateWork(data.work);
+  validateLife(data.life,data as unknown as Save);
+  for(const item of data.inventory as Catch[])if(item.order!==undefined)integer(item.order,1,(data.journey as Journey).totalCaught);
+  if(data.pending&&(data.pending as Catch).order!==undefined)integer((data.pending as Catch).order,1,(data.journey as Journey).totalCaught);
 }
 
 function validateWork(value: unknown): void {
@@ -163,9 +161,12 @@ function validateJourney(value:unknown): void {
 
 export function upgradeSave(value:unknown): Save {
   const data=structuredClone(object(value));
-  if (data.formatVersion===3) { validateSave(data);return data; }
+  if (data.formatVersion===4) { validateSave(data);return data; }
+  if (data.formatVersion===3 && data.rulesVersion===2 && data.contentVersion===2) {
+    data.formatVersion=4;data.life=emptyLife();migrateLife(data as unknown as Save);validateSave(data);return data;
+  }
   if (data.formatVersion===2 && data.rulesVersion===2 && data.contentVersion===2) {
-    data.formatVersion=3;data.work=emptyWork();validateSave(data);return data;
+    data.formatVersion=3;data.work=emptyWork();return upgradeSave(data);
   }
   if (data.formatVersion!==1||data.rulesVersion!==1||data.contentVersion!==1) throw new Error('UNSUPPORTED_SAVE_VERSION');
   const legacyIds:SpeciesId[]=['F001','F002','F003','A001'];
@@ -195,5 +196,5 @@ export function upgradeSave(value:unknown): Save {
     cast.meta={source:'legacy',region:'L01',bait:'B01',tide:'calm'};
   }
   data.formatVersion=3;data.rulesVersion=2;data.contentVersion=2;data.journey=journey;data.work=emptyWork();
-  validateSave(data);return data;
+  return upgradeSave(data);
 }

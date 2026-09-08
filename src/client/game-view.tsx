@@ -10,6 +10,9 @@ import type { Catch, Mode } from '../game/engine.ts';
 import { GameController } from './controller.ts';
 import { createScene } from './scene.tsx';
 import { createHarbor } from './harbor.tsx';
+import { createLifeView } from './life-view.tsx';
+import { displayed } from '../game/goals.ts';
+import { guest } from '../game/guests.ts';
 
 export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentType<GameProps> {
   const Scene = createScene(React);
@@ -31,11 +34,12 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
       <div className={`dsh-fisher-meter${danger ? ' is-tension' : ''}`} role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
         <i style={{ width: `${percent}%` }} /><span /></div></div>;
   }
+  const LifeView = createLifeView(React,FishArt);
 
   return function Game({ lowPerformance }: GameProps) {
     const [controller] = React.useState(() => new GameController());
     const view = React.useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
-    const [tab, setTab] = React.useState<'fishing' | 'catalog' | 'inventory' | 'harbor'>('fishing');
+    const [tab, setTab] = React.useState<'fishing' | 'catalog' | 'inventory' | 'harbor' | 'life'>('fishing');
     const [catalogRegion,setCatalogRegion]=React.useState<RegionId>('L01');
     const [search,setSearch]=React.useState('');
     const [mode, setMode] = React.useState<Mode>('assisted');
@@ -63,7 +67,7 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
     const phase = sim?.phase;
     const pending = data?.pending;
     const location=region(data?.journey.region??'L01');
-    const tidyItems=data?.inventory.filter(item=>!item.locked&&!item.isNew&&!item.isRecord&&!item.isNewVariant)??[];
+    const tidyItems=data?.inventory.filter(item=>!item.locked&&!item.isNew&&!item.isRecord&&!item.isNewVariant&&!displayed(data,item.id))??[];
     const blocked = view.busy || view.retryPending || !data?.gameplayAvailable || !view.connected;
     const resolve = (item: Catch, source: 'catch' | 'inventory', choice: 'keep' | 'sell' | 'release') => {
       if (choice !== 'keep' && (item.isNew || item.isRecord || item.isNewVariant)) { setConfirm({ item, source, choice }); return; }
@@ -74,6 +78,8 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
     const changeTab = (next: typeof tab) => { controller.pause(); setTab(next); setConfirm(null); setCancelConfirm(false); root.current?.closest('.dsh-fisher-body')?.scrollTo({top:0}); };
     const mood = pending ? '今天的海，回了一封信' : view.paused && cast ? '这一竿，等你回来' : phase === 'bite' ? '浮漂动了 · 现在提竿'
       : phase === 'fighting' ? warning(sim!, cast!.challenge) : phase === 'casting' ? '轻轻把线送出去' : phase === 'waiting' ? '等一阵涟漪' : '留一点时间给风，也给自己。';
+    const visitor=data?.life.visitor?guest(data.life.visitor):null;
+    const visitorLine=visitor?(pending?visitor.lines[pending.isRecord?8:pending.isNew?6:7]:view.paused&&cast?visitor.lines[9]:visitor.lines[data!.life.guests[visitor.id].stage===3?10:2]):null;
     return <div className="dsh-fisher-game" ref={root}>
       <div className="dsh-fisher-location"><div><small>海岸手记 · Lv.{levelInfo(data?.experience??0).level}</small><h2>{location.name}</h2></div>
         <div className="dsh-fisher-wallet"><span title="壳币">壳币 <b>{data?.coins ?? '—'}</b></span><small>潮汐碎片 {data?.tokens ?? '—'} · 研究 {data?.research ?? '—'}</small></div></div>
@@ -82,6 +88,7 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
         <button aria-current={tab === 'catalog' ? 'page' : undefined} onClick={() => changeTab('catalog')}>图鉴 <small>{Object.keys(data?.catalog ?? {}).length}/48</small></button>
         <button aria-current={tab === 'inventory' ? 'page' : undefined} onClick={() => changeTab('inventory')}>背包 <small>{data?.inventory.length ?? 0}</small></button>
         <button aria-current={tab === 'harbor' ? 'page' : undefined} onClick={() => changeTab('harbor')}>码头</button>
+        <button aria-current={tab === 'life' ? 'page' : undefined} onClick={() => changeTab('life')}>手记</button>
       </nav>
       {tab === 'fishing' && <>
         <div className={`dsh-fisher-scene dsh-fisher-play-scene${phase === 'fighting' && !view.paused ? ' is-fighting' : ''}`}>
@@ -121,12 +128,14 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
             <div className="dsh-fisher-quiet-actions">{!view.paused && <button disabled={view.busy} onClick={() => controller.pause()}>歇一会儿</button>}
               <button disabled={blocked || cast.owner !== controller.clientId||phase==='recovery'} onClick={() => { controller.pause(); setCancelConfirm(true); }}>收起这一竿</button></div>
           </> : <><div className="dsh-fisher-play-heading"><h3>{data?.lastOutcome === 'escaped' ? '鱼回到水里了' : '在这里，慢一点也很好'}</h3><small>{gear(data?.journey.loadout.rod??'D01').name}</small></div>
-            <p>{data?.lastOutcome === 'escaped' ? '下次张力升高时松一松线，再试一竿。' : `${bait(data?.journey.bait??'B01').name} · ${data?.journey.bait==='B01'?'免费无限':`剩余 ${data?.journey.baits[data.journey.bait]??0} 份`}`}</p>
+            <p>{data?.lastOutcome === 'escaped' ? '下次张力升高时松一松线，再试一竿。' : `${bait(data?.journey.bait??'B01').name} · ${data?.journey.bait==='B01'?'免费无限':data?.journey.bait==='B08'?`邀请${data.journey.target?species(data.journey.target).name:'来客'}`:`剩余 ${data?.journey.baits[data.journey.bait]??0} 份`}`}</p>
             <label className="dsh-fisher-toggle"><input type="checkbox" checked={mode === 'assisted'} disabled={blocked} onChange={event => setMode(event.target.checked ? 'assisted' : 'standard')} />辅助松线 <span>张力高时帮你松线</span></label>
             <button className="dsh-fisher-primary" disabled={blocked} onClick={() => void controller.action({ type: 'cast.begin', mode })}>抛竿</button><div className="dsh-fisher-quiet-actions"><button onClick={()=>changeTab('harbor')}>换钓点 · 整理装备</button></div></>}
         </section>
+        {visitor&&<aside className="dsh-fisher-visitor" aria-label="岸边来客"><b>{visitor.name}</b><p>{visitorLine}</p><button onClick={()=>changeTab('life')}>翻开来客手记</button></aside>}
       </>}
       {tab==='harbor'&&data&&<Harbor data={data} controller={controller} blocked={blocked}/>}
+      {tab==='life'&&data&&<LifeView data={data} controller={controller} blocked={blocked} onFish={()=>changeTab('fishing')}/>}
       {tab === 'catalog' && <section className="dsh-fisher-collection" aria-label="海岸图鉴"><div className="dsh-fisher-collection-intro"><h3>水边的相遇</h3><p>发现会留下。出售或放流，也不影响图鉴。</p>
         <div className="dsh-fisher-actions">{REGIONS.map(item=><button key={item.id} aria-pressed={catalogRegion===item.id} onClick={()=>setCatalogRegion(item.id)}>{item.name}</button>)}</div><input aria-label="搜索图鉴" placeholder="搜索已发现的名字" value={search} onChange={event=>setSearch(event.target.value)}/></div>
         {SPECIES.filter(entry=>entry.region===catalogRegion&&(!search||(data?.catalog[entry.id]&&entry.name.includes(search)))).map(entry => { const record = data?.catalog[entry.id];const clue=(data?.journey.completed[entry.region]??0)>=10&&entry.kind!=='guest'; return <article className="dsh-fisher-entry" key={entry.id}>
@@ -135,11 +144,11 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
             {record ? <><p>{entry.description}</p><small>相遇 {record.count} 次{record.bestLengthMm!==null?` · 最长 ${(record.bestLengthMm/10).toFixed(1)} cm · 最重 ${record.bestWeightG} g`:''}</small><small>{Object.entries(record.variants).map(([variant,count])=>`${VARIANT_NAMES[variant as Variant]} ${count}`).join(' · ')}</small></> : <p>{entry.kind==='guest'?'完成这片海岸的来客请求，就能寄出邀请。':clue?`线索：在${region(entry.region).name}使用${entry.tags.includes('glow')?'夜光饵':entry.tags.includes('grain')?'谷香饵':entry.tags.includes('marine')?'海盐饵':entry.tags.includes('deep')?'深潜饵':entry.kind==='abstract'?'怪味饵':'普通面团'}，或选择图鉴定向饵。`:'从一圈涟漪开始认识。本区完成 10 竿后公开线索。'}</p>}</div>
         </article>; })}</section>}
       {tab === 'inventory' && <section className="dsh-fisher-collection" aria-label="收获背包"><div className="dsh-fisher-collection-intro"><h3>带回来的小小纪念</h3>
-        <p>{data?.inventory.length ?? 0} / 240 格 · 再放流或回收 {5-(data?.journey.releaseProgress??0)} 次可得 1 潮汐碎片</p><div className="dsh-fisher-actions"><button disabled={blocked||!tidyItems.length} onClick={()=>void controller.action({type:'inventory.batch',catchIds:tidyItems.map(item=>item.id),choice:'sell'})}>出售普通收获 {tidyItems.length}</button><button disabled={blocked||!tidyItems.length} onClick={()=>void controller.action({type:'inventory.batch',catchIds:tidyItems.map(item=>item.id),choice:'release'})}>放流／回收 {tidyItems.length}</button></div><p>新发现、首次外观、纪录和已锁定个体保留。</p></div>
+        <p>{data?.inventory.length ?? 0} / 240 格 · 再放流或回收 {5-(data?.journey.releaseProgress??0)} 次可得 1 潮汐碎片</p><div className="dsh-fisher-actions"><button disabled={blocked||!tidyItems.length} onClick={()=>void controller.action({type:'inventory.batch',catchIds:tidyItems.map(item=>item.id),choice:'sell'})}>出售普通收获 {tidyItems.length}</button><button disabled={blocked||!tidyItems.length} onClick={()=>void controller.action({type:'inventory.batch',catchIds:tidyItems.map(item=>item.id),choice:'release'})}>放流／回收 {tidyItems.length}</button></div><p>新发现、首次外观、纪录、已锁定和展示中的个体保留。</p></div>
         {!data?.inventory.length && <div className="dsh-fisher-empty"><span aria-hidden="true">≈</span><p>背包里还装着海风。</p><button onClick={() => changeTab('fishing')}>去钓一竿</button></div>}
         {data?.inventory.map(item => <article className="dsh-fisher-entry" key={item.id}><FishArt id={item.speciesId} variant={item.variant}/><div><small>{item.isNew ? '初次相遇' : item.isRecord ? '纪录留念' : item.isNewVariant?'首次外观':'水边收获'}{item.variant?` · ${VARIANT_NAMES[item.variant]}`:''}</small>
           <h3>{species(item.speciesId).name}</h3><p>{measurements(item)}</p><button className="dsh-fisher-lock" aria-pressed={item.locked} disabled={blocked} onClick={()=>void controller.action({type:'inventory.lock',catchId:item.id,locked:!item.locked})}>{item.locked?'已锁定 · 点击解锁':'锁定留念'}</button>
-          <div className="dsh-fisher-actions"><button disabled={blocked||item.locked} onClick={() => resolve(item, 'inventory', 'sell')}>出售 +{item.price}</button><button disabled={blocked||item.locked} onClick={() => resolve(item, 'inventory', 'release')}>{releaseLabel(item)}</button></div></div></article>)}</section>}
+          {displayed(data,item.id)&&<small>正在展示 · 到手记的展示页取回</small>}<div className="dsh-fisher-actions"><button disabled={blocked||item.locked||displayed(data,item.id)} onClick={() => resolve(item, 'inventory', 'sell')}>出售 +{item.price}</button><button disabled={blocked||item.locked||displayed(data,item.id)} onClick={() => resolve(item, 'inventory', 'release')}>{releaseLabel(item)}</button></div></div></article>)}</section>}
       {confirm && <div className="dsh-fisher-confirm" role="alert"><p>这是{confirm.item.isNew ? '首次发现' :confirm.item.isNewVariant?'首次外观': '刷新纪录'}的{species(confirm.item.speciesId).name}。{confirm.choice === 'sell' ? '出售' : releaseLabel(confirm.item)}后图鉴仍会保留。</p>
         <div className="dsh-fisher-actions"><button disabled={blocked} onClick={() => {
           void controller.action(confirm.source === 'catch' ? { type: 'catch.resolve', catchId: confirm.item.id, choice: confirm.choice,confirmed:true }

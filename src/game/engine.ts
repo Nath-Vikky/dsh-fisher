@@ -16,7 +16,7 @@ export interface InputEdge { tick: number; reel: boolean }
 export interface Catch {
   id: string; speciesId: SpeciesId; lengthMm: number | null; weightG: number | null; quality: number | null;
   price: number; caughtAt: string; isNew: boolean; isRecord: boolean;
-  region: RegionId; variant: Variant | null; isNewVariant: boolean; locked: boolean;
+  region: RegionId; variant: Variant | null; isNewVariant: boolean; locked: boolean; order?:number;
 }
 export interface Encounter { challenge: Challenge; catch: Catch }
 

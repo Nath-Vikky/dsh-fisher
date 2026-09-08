@@ -15,14 +15,13 @@ import { SaveStore } from './store.ts';
 import { SUPPLY_BAITS, workView } from '../game/work.ts';
 import { emptyWorkRuntime, observeWork, settleWork } from './work-runtime.ts';
 import type { WorkEvent, WorkRuntime, WorkTime } from './work-runtime.ts';
+import { recordLifeEvent, refreshLife } from '../game/life.ts';
+import { applyLifeAction } from './life-actions.ts';
+import { ActionError, award, requireDisposable, requireState } from './actions-common.ts';
+export { ActionError } from './actions-common.ts';
 
 export const workClock = (): WorkTime => ({ wall: Date.now(), mono: Math.floor(performance.now()) });
 
-export class ActionError extends Error {
-  readonly status: number;
-  constructor(message: string, status = 409) { super(message); this.status = status; }
-}
-function requireState(condition: unknown, message: string): asserts condition { if (!condition) throw new ActionError(message); }
 function fingerprint(value: unknown): string {
   const stable = (item: unknown): string => Array.isArray(item) ? `[${item.map(stable).join(',')}]`
     : item && typeof item === 'object' ? `{${Object.keys(item).sort().map(key => `${JSON.stringify(key)}:${stable((item as Record<string, unknown>)[key])}`).join(',')}}`
@@ -59,7 +58,7 @@ export class FisherService {
       issue: this.store.issue ?? (this.writeError ? '保存没有完成，已暂停；请重试保存' : null),
       coins: this.save.coins, tokens: this.save.tokens, research: this.save.research, experience: this.save.experience,
       released: this.save.released, inventory: this.save.inventory, catalog: this.save.catalog, journey:this.save.journey,
-      work: workView(this.save.work, this.clock().wall),
+      work: workView(this.save.work, this.clock().wall), life: this.save.life,
       active: active ? { id: active.id, owner: active.owner, ownerEpoch: active.ownerEpoch, leaseUntil: active.leaseUntil,
         castRevision: active.castRevision, inputCursor: active.inputCursor, paused: active.paused,
         challenge: active.challenge, simulation: active.simulation,setup:active.meta } : null,
@@ -146,6 +145,7 @@ export class FisherService {
     try {
       if (input) this.applyInput(next, value as InputRequest);
       else this.applyAction(next, request);
+      refreshLife(next);
     } catch (error) {
       if (error instanceof ActionError) throw error;
       throw new ActionError('请求内容不正确', 400);
@@ -163,6 +163,7 @@ export class FisherService {
   }
   private applyAction(save: Save, { action, clientId }: ActionRequest): void {
     object(action);
+    if (applyLifeAction(save, action)) return;
     switch (action.type) {
       case 'cast.begin': {
         requireState(!save.active && !save.pending, '请先处理这一竿');
@@ -219,7 +220,7 @@ export class FisherService {
         if (action.choice === 'keep') {
           requireState(save.inventory.length < 240, '背包已满，请先整理');
           save.inventory.push(item);
-        } else { this.requireUnprotected(item,action.confirmed);this.resolveCatch(save, item, action.choice); }
+        } else { requireDisposable(save,item,action.confirmed);this.resolveCatch(save, item, action.choice); }
         save.pending = null;
         break;
       }
@@ -227,7 +228,7 @@ export class FisherService {
         const index = save.inventory.findIndex(item => item.id === id(action.catchId));
         requireState(index >= 0, '这份收获已经处理');
         requireState(action.choice === 'sell' || action.choice === 'release', '请选择处理方式');
-        this.requireUnprotected(save.inventory[index]!,action.confirmed);
+        requireDisposable(save,save.inventory[index]!,action.confirmed);
         this.resolveCatch(save, save.inventory[index]!, action.choice);
         save.inventory.splice(index, 1);
         break;
@@ -241,7 +242,7 @@ export class FisherService {
           &&new Set(action.catchIds).size===action.catchIds.length,'请选择有效的收获数量');
         requireState(action.choice==='sell'||action.choice==='release','请选择处理方式');
         const items=action.catchIds.map(catchId=>save.inventory.find(item=>item.id===id(catchId)));
-        for (const item of items) { requireState(item,'有收获已被处理');this.requireUnprotected(item,false); }
+        for (const item of items) { requireState(item,'有收获已被处理');requireDisposable(save,item,false); }
         for (const item of items) this.resolveCatch(save,item!,action.choice);
         save.inventory=save.inventory.filter(item=>!action.catchIds.includes(item.id));break;
       }
@@ -291,25 +292,18 @@ export class FisherService {
         const stock = save.journey.baits[action.bait] ?? 0;
         requireState(stock <= 9997, '这种鱼饵的库存已满，请换一种');
         save.work.packs.splice(index, 1); save.journey.baits[action.bait] = stock + 2;
-        this.award(save, 20, 1); break;
+        award(save, 20, 1); break;
       }
       default: throw new ActionError('未知操作', 400);
     }
   }
-  private requireUnprotected(item:Catch,confirmed:unknown): void {
-    requireState(!item.locked,'请先解锁这份收获');
-    requireState(!(item.isNew||item.isNewVariant||item.isRecord)||confirmed===true,'这是新发现、首次外观或纪录个体，请单独确认');
-  }
-  private award(save:Save,coins=0,tokens=0): void {
-    if (save.coins+coins>9999999 || save.tokens+tokens>99999) save.journey.overflow=true;
-    save.coins=Math.min(9999999,save.coins+coins);save.tokens=Math.min(99999,save.tokens+tokens);
-  }
   private resolveCatch(save: Save, item: Catch, choice: 'sell' | 'release'): void {
-    if (choice === 'sell') this.award(save,item.price);
+    if (choice === 'sell') award(save,item.price);
     else {
       if (species(item.speciesId).creature) save.released++;
       save.journey.releaseProgress++;
-      if (save.journey.releaseProgress===5) {save.journey.releaseProgress=0;this.award(save,0,1);}
+      if (save.journey.releaseProgress===5) {save.journey.releaseProgress=0;award(save,0,1);}
+      recordLifeEvent(save,{type:'release',item});
     }
   }
   private applyInput(save: Save, request: InputRequest): void {
@@ -343,6 +337,7 @@ export class FisherService {
   }
   private completeCatch(save:Save,cast:PrivateCast): void {
     const item=cast.catch,def=species(item.speciesId),prior=save.catalog[item.speciesId],journey=save.journey;
+    const lengthRecord=!!prior&&item.lengthMm!==null&&item.lengthMm>(prior.bestLengthMm??0);
     item.isNew=!prior;
     item.isRecord=!!prior&&item.lengthMm!==null&&item.weightG!==null
       &&(item.lengthMm>(prior.bestLengthMm??0)||item.weightG>(prior.bestWeightG??0));
@@ -355,16 +350,17 @@ export class FisherService {
     const base=def.kind==='fish'?10:def.kind==='abstract'?12:0;
     const bonus=cast.challenge.mode==='standard'&&(cast.simulation.peakDanger??0)<200000?Math.floor(base*.1):0;
     save.experience+=base+bonus+(item.isNew&&def.kind!=='guest'?15:0);
-    if (def.kind==='relic'&&!item.isNew) this.award(save,0,2);
+    if (def.kind==='relic'&&!item.isNew) award(save,0,2);
     if (item.isNew) journey.dryStreak[item.region]=0;
     else if (cast.meta.source==='random'||cast.meta.source==='pity'||cast.meta.source==='legacy') journey.dryStreak[item.region]=Math.min(8,journey.dryStreak[item.region]+1);
     if (def.creature) {
       journey.variantStreak=item.variant==='original'?Math.min(39,journey.variantStreak+1):0;
       if (item.quality!<100) journey.miniCaught++;
-      if (prior && item.lengthMm!>prior.bestLengthMm!) journey.lengthRecords++;
+      if (lengthRecord) journey.lengthRecords++;
     }
-    journey.totalCaught++;journey.tutorialDone=true;finishTide(journey,cast.meta.region);
+    item.order=++journey.totalCaught;journey.tutorialDone=true;finishTide(journey,cast.meta.region);
     save.pending=item;save.active=null;
+    recordLifeEvent(save,{type:'catch',item,bait:cast.meta.bait,peakDanger:cast.simulation.peakDanger??0,lengthRecord});
     if (cast.meta.source==='target'||cast.meta.source==='invitation') {journey.bait='B01';journey.target=null;}
   }
   private notify(): void { for (const listener of this.listeners) { try { listener(); } catch { /* A closed subscriber cannot roll back a save. */ } } }
