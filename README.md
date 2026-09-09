@@ -2,11 +2,9 @@
 
 面向 DeepSeek Harness（DSH）Web 的像素钓鱼与收藏插件。工作之余，在岸边慢慢钓一竿。
 
-当前版本为 `0.1.0-rc.2`，可从源码构建并本地安装，尚未发布到 npm。
+当前版本为 `0.1.0-rc.4`，可从源码构建并本地安装，尚未发布到 npm。
 
-| 钓鱼 | 展示（示例进度） |
-|---|---|
-| ![钓鱼画面](assets/readme/fishing.png) | ![鱼缸与陈列架](assets/readme/showcase.png) |
+![钓鱼场景](assets/readme/fishing.png)
 
 ## 功能
 
@@ -25,7 +23,11 @@
 
 点击页面右下角的“摸鱼海岸”，再点击“抛竿”。浮漂提示咬钩后点击“提竿”，按住收线按钮或在按钮上按住空格收线，张力升高时松开；也可启用“点击切换收线”。辅助松线默认开启，可在抛竿前关闭。
 
+获得收获后显示弹窗，点击空白处或“留下并继续”会放入背包；背包已满时需选择出售或放流／回收。领取补给、委托奖励及购买物品后也会显示获得弹窗。
+
 关闭窗口、离开页面或点击游戏外部会暂停这一竿。返回后点击“继续这一竿”；在其他浏览器窗口选择“在这里继续这一竿”会转移操作权。游戏不在后台自动钓鱼。
+
+“码头”和“手记”以入口卡片组织功能，点击后打开详情窗口。图鉴、背包和较长列表使用分页；“!”按钮可悬浮、聚焦或点击查看说明。
 
 “码头”提供钓点、鱼饵、装备、潮相和存档管理。普通面团免费无限，基础游玩不依赖工作补给。工作补给只观察启用后的新活动，多个会话合并计时，离线不累计；关闭小游戏仍可积累，关闭补给开关或禁用插件则停止观察。
 
@@ -61,7 +63,7 @@ npm pack --ignore-scripts
 
 ```powershell
 $env:DSH_HOME = Join-Path $PWD 'tmp/dsh-fisher-preview'
-$fisherPackage = Join-Path $PWD 'nath-vikky-dsh-fisher-0.1.0-rc.2.tgz'
+$fisherPackage = Join-Path $PWD 'nath-vikky-dsh-fisher-0.1.0-rc.4.tgz'
 pnpm dlx @deepseek-ai/dsh@0.1.2-rc.1 plugin --profile web add --ignore-scripts $fisherPackage
 pnpm dlx @deepseek-ai/dsh@0.1.2-rc.1 web
 ```

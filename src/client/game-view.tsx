@@ -11,13 +11,13 @@ import { GameController } from './controller.ts';
 import { createScene } from './coast-scene.tsx';
 import { createHarbor } from './harbor.tsx';
 import { createLifeView } from './life-view.tsx';
-import { displayed } from '../game/goals.ts';
 import { guest } from '../game/guests.ts';
 import { thumbnailAsset } from '../game/art.ts';
 import { createCardButton } from './card-button.tsx';
 import { createCatalogView } from './catalog-view.tsx';
 import { createDialog } from './dialog.tsx';
 import { CoastSound } from './sound.ts';
+import { createInventoryView } from './inventory-view.tsx';
 
 export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentType<GameProps> {
   const Scene = createScene(React);
@@ -44,6 +44,7 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
   }
   const LifeView = createLifeView(React,FishArt);
   const Catalog = createCatalogView(React,FishArt);
+  const Inventory = createInventoryView(React,FishArt);
 
   return function Game({ lowPerformance,reducedMotion=false,sound=false,volume=.35 }: GameProps) {
     const [controller] = React.useState(() => new GameController());
@@ -91,7 +92,6 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
     },[audio,data,cast,pending,phase,view.error]);
     React.useEffect(()=>{if(!view.connected)audio.quiet();},[audio,view.connected]);
     const location=region(data?.journey.region??'L01');
-    const tidyItems=data?.inventory.filter(item=>!item.locked&&!item.isNew&&!item.isRecord&&!item.isNewVariant&&!displayed(data,item.id))??[];
     const blocked = view.busy || view.retryPending || !data?.gameplayAvailable || !view.connected;
     const resolve = (item: Catch, source: 'catch' | 'inventory', choice: 'keep' | 'sell' | 'release') => {
       if (choice !== 'keep' && (item.isNew || item.isRecord || item.isNewVariant)) { setConfirm({ item, source, choice }); return; }
@@ -117,23 +117,14 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
       {!view.connected&&<p className="dsh-fisher-empty">海岸正在等待连接，进度已暂停。</p>}
       {view.connected&&tab === 'fishing' && <>
         <div className={`dsh-fisher-scene dsh-fisher-play-scene${phase === 'fighting' && !view.paused ? ' is-fighting' : ''}`}>
-          <Scene lowPerformance={lowPerformance} reducedMotion={reducedMotion} data={data} pose={pending?'surprise':phase==='casting'?'cast':phase==='fighting'&&view.reel?'reel':cast?'hold':'idle'} paused={!!cast && view.paused || !view.connected || !!confirm || cancelConfirm} />
+          <Scene lowPerformance={lowPerformance} reducedMotion={reducedMotion} data={data} pose={pending?'surprise':phase==='casting'?'cast':phase==='fighting'&&view.reel?'reel':cast?'hold':'idle'} paused={!!cast && view.paused || !view.connected || !!confirm || cancelConfirm || !!pending || !!view.reward} />
           <div className="dsh-fisher-scene-label"><span>{cast?.setup?TIDE_NAMES[cast.setup.tide]:data?TIDE_NAMES[currentTide(data.journey)]:'平潮'} · 风轻</span><b>{location.id.slice(1)} / SHORE</b></div>
           {cast && !pending && <div className="dsh-fisher-float" data-phase={view.paused ? 'paused' : phase} data-glow={data!.journey.loadout.float==='U03'&&['L03','L04'].includes(location.id)} aria-hidden="true">{GEAR_ART[data!.journey.loadout.float]?<img src={`${API}/assets/${thumbnailAsset(GEAR_ART[data!.journey.loadout.float]!)}`} alt=""/>:<i/>}<b /></div>}
           {pending?.isRecord&&data!.journey.loadout.float==='U04'&&<span className="dsh-fisher-record-flag">新纪录</span>}
           <div className="dsh-fisher-note" role="status">{mood}</div>
         </div>
         <section className="dsh-fisher-play-card" aria-label="钓鱼操作">
-          {pending ? <>
-            <div className="dsh-fisher-catch-heading"><small>{pending.isNew ? '新发现' : pending.isRecord ? '新纪录' : '有收获了'}</small><h3>{species(pending.speciesId).name}</h3></div>
-            <FishArt id={pending.speciesId} variant={pending.variant} large />
-            <div className="dsh-fisher-catch-stats"><span>{measurements(pending)}</span>{pending.variant&&<span>{sizeLabel(pending.quality)} · {VARIANT_NAMES[pending.variant]}</span>}{pending.price>0&&<span>{pending.price} 壳币</span>}</div>
-            <p className="dsh-fisher-flavor">{species(pending.speciesId).description}</p>
-            <CardButton item={pending} frame={data!.life.frame} onStart={()=>controller.pause()}/>
-            {isInventorySpecies(pending.speciesId)?<div className="dsh-fisher-actions"><button disabled={blocked || data!.inventory.length >= 240} onClick={() => resolve(pending, 'catch', 'keep')}>留下</button>
-              <button disabled={blocked} onClick={() => resolve(pending, 'catch', 'sell')}>出售 +{pending.price}</button>
-              <button disabled={blocked} onClick={() => resolve(pending, 'catch', 'release')}>{releaseLabel(pending)}</button></div>:<><p>{species(pending.speciesId).kind==='relic'?(pending.isNew?'已加入海岸陈列，不占背包格。':'已有的纪念，化作了 2 枚潮汐碎片。'):'这次相遇已记入海岸手记。'}</p><button disabled={blocked} className="dsh-fisher-primary" onClick={()=>resolve(pending,'catch','keep')}>记下这次相遇</button></>}
-          </> : cast ? <>
+          {pending ? <p>新相遇，慢慢看。</p> : cast ? <>
             <div className="dsh-fisher-play-heading"><h3>{view.paused ? '这一竿已暂停' : phase === 'fighting' ? '跟着它的节奏' : phase === 'bite' ? '有鱼咬钩！' : '等鱼来信'}</h3>
               <small>{cast.challenge.mode==='guided'?'引导收获':cast.challenge.mode === 'assisted' ? '辅助松线' : '标准模式'}</small></div>
             {phase === 'fighting' && <><Meter label="收线进度" value={sim!.progress} /><Meter label="鱼线张力" value={sim!.tension} danger />
@@ -164,12 +155,15 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
       {view.connected&&tab==='harbor'&&data&&<Harbor data={data} controller={controller} blocked={blocked} lowPerformance={lowPerformance} reducedMotion={reducedMotion} storageBusy={view.busy||view.retryPending}/>}
       {view.connected&&tab==='life'&&data&&<LifeView data={data} controller={controller} blocked={blocked} reducedMotion={reducedMotion} lowPerformance={lowPerformance} onFish={()=>changeTab('fishing')}/>}
       {view.connected&&tab==='catalog'&&data&&<Catalog data={data} controller={controller} blocked={blocked} onFish={()=>changeTab('fishing')}/>}
-      {view.connected&&tab === 'inventory' && <section className="dsh-fisher-collection" aria-label="收获背包"><div className="dsh-fisher-collection-intro"><h3>带回来的小小纪念</h3>
-        <p>{data?.inventory.length ?? 0} / 240 格 · 再放流或回收 {5-(data?.journey.releaseProgress??0)} 次可得 1 潮汐碎片</p><div className="dsh-fisher-actions"><button disabled={blocked||!tidyItems.length} onClick={()=>void controller.action({type:'inventory.batch',catchIds:tidyItems.map(item=>item.id),choice:'sell'})}>出售普通收获 {tidyItems.length}</button><button disabled={blocked||!tidyItems.length} onClick={()=>void controller.action({type:'inventory.batch',catchIds:tidyItems.map(item=>item.id),choice:'release'})}>放流／回收 {tidyItems.length}</button></div><p>新发现、首次外观、纪录、已锁定和展示中的个体保留。</p></div>
-        {!data?.inventory.length && <div className="dsh-fisher-empty"><span aria-hidden="true">≈</span><p>背包里还装着海风。</p><button onClick={() => changeTab('fishing')}>去钓一竿</button></div>}
-        {data?.inventory.map(item => <article className="dsh-fisher-entry" key={item.id}><FishArt id={item.speciesId} variant={item.variant}/><div><small>{item.isNew ? '初次相遇' : item.isRecord ? '纪录留念' : item.isNewVariant?'首次外观':'水边收获'}{item.variant?` · ${VARIANT_NAMES[item.variant]}`:''}</small>
-          <h3>{species(item.speciesId).name}</h3><p>{measurements(item)}</p><button className="dsh-fisher-lock" aria-pressed={item.locked} disabled={blocked} onClick={()=>void controller.action({type:'inventory.lock',catchId:item.id,locked:!item.locked})}>{item.locked?'已锁定 · 点击解锁':'锁定留念'}</button><CardButton item={item} frame={data.life.frame} onStart={()=>controller.pause()}/>
-          {displayed(data,item.id)&&<small>正在展示 · 到手记的展示页取回</small>}<div className="dsh-fisher-actions"><button disabled={blocked||item.locked||displayed(data,item.id)} onClick={() => resolve(item, 'inventory', 'sell')}>出售 +{item.price}</button><button disabled={blocked||item.locked||displayed(data,item.id)} onClick={() => resolve(item, 'inventory', 'release')}>{releaseLabel(item)}</button></div></div></article>)}</section>}
+      {view.connected&&tab==='inventory'&&data&&<Inventory data={data} controller={controller} blocked={blocked} onFish={()=>changeTab('fishing')} onResolve={(item,choice)=>resolve(item,'inventory',choice)}/>}
+      {view.connected&&pending&&data&&<Dialog key={pending.id} title={`${pending.isNew?'新发现':pending.isRecord?'新纪录':'有收获了'} · ${species(pending.speciesId).name}`} className="dsh-fisher-catch-dialog" busy={view.busy} closeDisabled={blocked||(isInventorySpecies(pending.speciesId)&&data.inventory.length>=240)} closeLabel={isInventorySpecies(pending.speciesId)?'留下并继续':'继续'} hint={isInventorySpecies(pending.speciesId)?data.inventory.length>=240?'背包已满，请选择出售或放流／回收。':'点击空白处继续，收获会放入背包。':'点击空白处继续。'} onClose={()=>{if(!blocked&&(!isInventorySpecies(pending.speciesId)||data.inventory.length<240))resolve(pending,'catch','keep');}}>
+        <div className="dsh-fisher-catch-heading"><FishArt id={pending.speciesId} variant={pending.variant} large/></div>
+        <div className="dsh-fisher-catch-stats"><span>{measurements(pending)}</span>{pending.variant&&<span>{sizeLabel(pending.quality)} · {VARIANT_NAMES[pending.variant]}</span>}{pending.price>0&&<span>{pending.price} 壳币</span>}</div>
+        <p className="dsh-fisher-flavor">{species(pending.speciesId).description}</p><CardButton item={pending} frame={data.life.frame} onStart={()=>controller.pause()}/>
+        {isInventorySpecies(pending.speciesId)?<div className="dsh-fisher-actions"><button disabled={blocked} onClick={()=>resolve(pending,'catch','sell')}>出售 +{pending.price}</button><button disabled={blocked} onClick={()=>resolve(pending,'catch','release')}>{releaseLabel(pending)}</button></div>:<p>{species(pending.speciesId).kind==='relic'?(pending.isNew?'已加入海岸陈列，不占背包格。':'已有的纪念，化作了2枚潮汐碎片。'):'这次相遇已记入海岸手记。'}</p>}
+        {view.error&&<div role="alert"><p>{view.error}</p><button disabled={view.busy} onClick={()=>void controller.retry()}>重试保存</button></div>}
+      </Dialog>}
+      {view.connected&&view.reward&&!pending&&<Dialog key={view.reward.id} title={view.reward.title} className="dsh-fisher-reward-dialog" onClose={controller.dismissReward} closeLabel="继续" hint="点击空白处继续。"><div className="dsh-fisher-reward-items">{view.reward.items.map((item,index)=><div className="dsh-fisher-reward-item" key={index}>{item.art?<img src={`${API}/assets/${item.art}`} alt=""/>:<span className="dsh-fisher-reward-mark" aria-hidden="true">✦</span>}<strong>{item.name}</strong><small>×{item.quantity}</small></div>)}</div></Dialog>}
       {confirm && <Dialog title="确认处理这份纪念" onClose={()=>setConfirm(null)} busy={view.busy}><p>这是{confirm.item.isNew ? '首次发现' :confirm.item.isNewVariant?'首次外观': '刷新纪录'}的{species(confirm.item.speciesId).name}。{confirm.choice === 'sell' ? '出售' : releaseLabel(confirm.item)}后图鉴仍会保留。</p>
         <div className="dsh-fisher-actions"><button disabled={blocked} onClick={() => {
           void controller.action(confirm.source === 'catch' ? { type: 'catch.resolve', catchId: confirm.item.id, choice: confirm.choice,confirmed:true }

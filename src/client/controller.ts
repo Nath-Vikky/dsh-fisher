@@ -2,17 +2,20 @@ import { API, isBootstrap } from '../protocol.ts';
 import type { Action, ActionRequest, Bootstrap, Envelope, InputRequest, MutationResult } from '../protocol.ts';
 import { step, TICK_MS } from '../game/engine.ts';
 import type { InputEdge, Simulation } from '../game/engine.ts';
+import { rewardNotice } from './rewards.ts';
+import type { RewardNotice } from './rewards.ts';
 
 const CLIENT_ID = crypto.randomUUID();
 interface View {
   data: Bootstrap | null; sim: Simulation | null; busy: boolean; paused: boolean; reel: boolean;
   error: string | null; connected: boolean; retryPending: boolean;
+  reward:RewardNotice|null;
 }
-interface Pending { route: 'actions' | 'cast-input'; body: ActionRequest | InputRequest }
+interface Pending { route: 'actions' | 'cast-input'; body: ActionRequest | InputRequest; before?:Bootstrap }
 
 export class GameController {
   readonly clientId = CLIENT_ID;
-  private view: View = { data: null, sim: null, busy: false, paused: true, reel: false, error: null, connected: false, retryPending: false };
+  private view: View = { data: null, sim: null, busy: false, paused: true, reel: false, error: null, connected: false, retryPending: false,reward:null };
   private readonly listeners = new Set<() => void>();
   private stream: EventSource | undefined;
   private frame = 0;
@@ -30,6 +33,7 @@ export class GameController {
   private refreshing = false;
   private fetchController: AbortController | undefined;
   getSnapshot = (): View => this.view;
+  dismissReward = ():void => {this.publish({reward:null});};
   subscribe = (listener: () => void): (() => void) => { this.listeners.add(listener); return () => this.listeners.delete(listener); };
   private publish(patch: Partial<View> = {}): void {
     this.view = { ...this.view, ...patch, retryPending: !!this.pending };
@@ -83,6 +87,7 @@ export class GameController {
   }
   private accept(data: Bootstrap, fromMutation: boolean): void {
     const previous = this.view.data;
+    if(previous&&previous.saveId!==data.saveId)this.view={...this.view,reward:null};
     if (previous?.generation === data.generation && data.revision < previous.revision) return;
     const preserve = !fromMutation && !!data.active && data.active.id === previous?.active?.id
       && data.active.castRevision === previous.active.castRevision && data.active.ownerEpoch === previous.active.ownerEpoch;
@@ -105,7 +110,7 @@ export class GameController {
   async action(action: Action): Promise<void> {
     if (this.view.busy || this.pending || !this.view.data || this.disposed) return;
     if (action.type === 'cast.begin' || action.type === 'cast.resume') this.pauseRequested = false;
-    this.pending = { route: 'actions', body: { ...this.envelope(), action } };
+    this.pending = { route: 'actions', body: { ...this.envelope(), action },before:this.view.data };
     await this.send();
   }
   setReel(reel: boolean): void {
@@ -186,6 +191,7 @@ export class GameController {
       }
       this.pending = undefined;
       this.accept(result.snapshot, true);
+      if(pending.before&&'action' in pending.body&&!this.disposed){const reward=rewardNotice(pending.body.action,pending.before,result.snapshot,pending.body.actionId);if(reward)this.publish({reward});}
       this.publish({ connected: true, error: result.snapshot.issue });
       success = true;
     } catch (error) {
