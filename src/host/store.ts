@@ -47,6 +47,7 @@ export class SaveStore {
   private locked=false;
   private workDisabled=false;
   private pendingReset:string|null=null;
+  pluginEnabled=true;
   get canManage():boolean {return !this.closed&&this.locked;}
   constructor(directory = saveDirectory()) { this.directory = directory; }
   async load(): Promise<Save> {
@@ -66,6 +67,11 @@ export class SaveStore {
       mutex.unref(); this.mutex = mutex;this.locked=true;
     } catch { this.issue = '存档正在被另一个宿主使用，或写入锁暂不可用'; mutex.close(); }
     try {
+      const preferences=object(JSON.parse(await readText(join(this.directory,'preferences.json'),512)));
+      if(preferences.version!==1||typeof preferences.enabled!=='boolean')throw new Error('INVALID_PREFERENCES');
+      this.pluginEnabled=preferences.enabled;
+    } catch(error) {if(errorCode(error)!=='ENOENT')throw error;}
+    try {
       const marker=object(JSON.parse(await readText(join(this.directory,'disabled.json'),512)));
       if(marker.version!==1||marker.workDisabled!==true)throw new Error('INVALID_DISABLE_MARKER');
       this.workDisabled=true;
@@ -84,7 +90,7 @@ export class SaveStore {
       const original=await readFile(join(this.directory,'save.json'),'utf8');
       const source=object(object(JSON.parse(original)).save),sourceVersion=source.formatVersion;
       const backupName=sourceVersion===1||sourceVersion===2||sourceVersion===3?`save.before-v${sourceVersion+1}.json`
-        :source.contentVersion===2?'save.before-content3.json':null;
+        :source.contentVersion===2?'save.before-content3.json':source.contentVersion===3?'save.before-content4.json':null;
       if (!this.issue && backupName) {
         const backupPath=join(this.directory,backupName);
         try {
@@ -115,6 +121,11 @@ export class SaveStore {
       this.issue = '存档未通过校验，已保留原文件；请先备份后恢复';
       try { const save=await readSave(join(this.directory,'save.backup.json'));if(this.workDisabled)save.work.enabled=false;this.previous=save;return save; } catch { return emptySave(); }
     }
+  }
+  async setPluginEnabled(enabled:boolean):Promise<void> {
+    if(!this.canManage)throw new Error('STORE_CLOSED');
+    await atomicFile(join(this.directory,'preferences.json'),JSON.stringify({version:1,enabled}));
+    this.pluginEnabled=enabled;
   }
   async write(save: Save): Promise<void> {
     if (this.closed || !this.locked || this.pendingReset || this.issue) throw new Error(this.issue ?? 'STORE_CLOSED');
@@ -160,7 +171,7 @@ export class SaveStore {
     try {
       await this.suppressWork(save.id);
       // The durable reset intent precedes removal of this plugin's enumerated save files.
-      const owned=/^save(?:\.backup|\.before-v[234]|\.before-content3|\.before-restore\.[12])?\.json(?:\.[0-9a-f-]{36}\.tmp)?$/;
+      const owned=/^save(?:\.backup|\.before-v[234]|\.before-content[34]|\.before-restore\.[12])?\.json(?:\.[0-9a-f-]{36}\.tmp)?$/;
       for(const name of await readdir(this.directory))if(owned.test(name))await unlink(join(this.directory,name));
       await atomicFile(join(this.directory,'save.backup.json'),body);
       await atomicFile(join(this.directory,'save.json'),body);

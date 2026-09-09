@@ -1,7 +1,7 @@
 import type * as ReactTypes from 'react';
 import { API } from '../protocol.ts';
 import type { GameProps } from '../protocol.ts';
-import { VARIANT_NAMES, region, sizeLabel, species, spriteName } from '../game/content.ts';
+import { SPECIES,VARIANT_NAMES, region, sizeLabel, species, spriteName } from '../game/content.ts';
 import type { SpeciesId, Variant } from '../game/content.ts';
 import { bait, currentTide, levelInfo, TIDE_NAMES, isInventorySpecies } from '../game/progression.ts';
 import { gear,GEAR_ART } from '../game/gear.ts';
@@ -46,8 +46,8 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
   const Catalog = createCatalogView(React,FishArt);
   const Inventory = createInventoryView(React,FishArt);
 
-  return function Game({ lowPerformance,reducedMotion=false,sound=false,volume=.35 }: GameProps) {
-    const [controller] = React.useState(() => new GameController());
+  return function Game({ lowPerformance,reducedMotion=false,sound=false,volume=.35,onEnabledChange }: GameProps) {
+    const [controller] = React.useState(() => new GameController(onEnabledChange));
     const [audio]=React.useState(()=>new CoastSound());
     const lastSound=React.useRef({cast:'',pending:'',phase:'',outcome:'',coins:0,error:''});
     React.useEffect(()=>{audio.configure(sound,volume);},[audio,sound,volume]);
@@ -109,7 +109,7 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
         <div className="dsh-fisher-wallet"><span title="壳币">壳币 <b>{data?.coins ?? '—'}</b></span><small>潮汐碎片 {data?.tokens ?? '—'} · 研究 {data?.research ?? '—'}</small></div></div>
       <nav className="dsh-fisher-tabs" aria-label="海岸页面">
         <button aria-current={tab === 'fishing' ? 'page' : undefined} onClick={() => changeTab('fishing')}>钓鱼</button>
-        <button aria-current={tab === 'catalog' ? 'page' : undefined} onClick={() => changeTab('catalog')}>图鉴 <small>{Object.keys(data?.catalog ?? {}).length}/48</small></button>
+        <button aria-current={tab === 'catalog' ? 'page' : undefined} onClick={() => changeTab('catalog')}>图鉴 <small>{Object.keys(data?.catalog ?? {}).length}/{SPECIES.length}</small></button>
         <button aria-current={tab === 'inventory' ? 'page' : undefined} onClick={() => changeTab('inventory')}>背包 <small>{data?.inventory.length ?? 0}</small></button>
         <button aria-current={tab === 'harbor' ? 'page' : undefined} onClick={() => changeTab('harbor')}>码头</button>
         <button aria-current={tab === 'life' ? 'page' : undefined} onClick={() => changeTab('life')}>手记</button>

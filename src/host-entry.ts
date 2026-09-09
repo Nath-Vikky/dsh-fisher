@@ -56,7 +56,7 @@ export function apply(ctx: HostContext): void {
     }
     const revisionEvent = () => {
       const state = service.snapshot();
-      return `event: revision\ndata: ${JSON.stringify({ generation: state.generation, revision: state.revision, gameplayAvailable: state.gameplayAvailable })}\n\n`;
+      return `event: revision\ndata: ${JSON.stringify({ generation: state.generation, revision: state.revision, gameplayAvailable: state.gameplayAvailable, pluginEnabled:service.preferences().enabled })}\n\n`;
     };
     const unsubscribe = service.subscribe(() => {
       syncObservation();
@@ -95,12 +95,13 @@ export function apply(ctx: HostContext): void {
         }
         if (disposed) { json(response, 503, { error: 'UNAVAILABLE' }); return; }
         const pathname = new URL(request.url ?? '/', 'http://localhost').pathname;
-        const known = [`${API}/bootstrap`, `${API}/state`, `${API}/events`, `${API}/actions`, `${API}/cast-input`,`${API}/save/preview`,`${API}/save/export`];
+        const preferences=pathname===`${API}/preferences`;
+        const known = [`${API}/preferences`,`${API}/bootstrap`, `${API}/state`, `${API}/events`, `${API}/actions`, `${API}/cast-input`,`${API}/save/preview`,`${API}/save/export`];
         if (!known.includes(pathname) && !assets.has(pathname)) { json(response, 404, { error: 'NOT_FOUND' }); return; }
         const preview=pathname===`${API}/save/preview`;
-        const mutation = pathname === `${API}/actions` || pathname === `${API}/cast-input` || preview;
+        const mutation = pathname === `${API}/actions` || pathname === `${API}/cast-input` || preview || preferences&&request.method==='POST';
         if (request.method !== (mutation ? 'POST' : 'GET')) {
-          response.setHeader('Allow', mutation ? 'POST' : 'GET');
+          response.setHeader('Allow', preferences?'GET, POST':mutation ? 'POST' : 'GET');
           json(response, 405, { error: 'METHOD_NOT_ALLOWED' });
           return;
         }
@@ -116,15 +117,17 @@ export function apply(ctx: HostContext): void {
             if (Number(request.headers['content-length'] ?? 0) > limit) throw new ActionError('请求过大', 413);
             const body = await readJson(request, limit);
             if (disposed) throw new ActionError('插件已停止', 503);
+            if(preferences){json(response,200,await service.setEnabled(body));return;}
             if(preview){json(response,200,await service.previewSave(body));return;}
             const result = await service.mutate(body, pathname.endsWith('/cast-input'));
             json(response, 200, result);
           } catch (error) {
             if (!response.destroyed) json(response, error instanceof ActionError ? error.status : 400,
-              { error: error instanceof ActionError ? error.message : '请求内容不正确', snapshot: service.snapshot() });
+              { error: error instanceof ActionError ? error.message : preferences?'插件设置未能保存，请重试':'请求内容不正确', snapshot: service.snapshot() });
           }
           return;
         }
+        if(preferences){json(response,200,service.preferences());return;}
         if(pathname===`${API}/save/export`) {
           try {
             const body=await service.exportSave();

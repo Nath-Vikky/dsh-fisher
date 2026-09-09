@@ -19,13 +19,13 @@ export { object, integer, id } from './validation.ts';
 export interface PrivateCast extends ActiveCast { seed: number; catch: Catch; meta: EncounterMeta }
 export interface Receipt { id: string; fingerprint: string; revision: number }
 export interface Save {
-  formatVersion: 4; rulesVersion: 2; contentVersion: 3; id: string; revision: number;
+  formatVersion: 4; rulesVersion: 2; contentVersion: 4; id: string; revision: number;
   coins: number; tokens: number; research: number; experience: number; released: number;
   inventory: Catch[]; catalog: Bootstrap['catalog']; active: PrivateCast | null; pending: Catch | null;
   lastOutcome: Bootstrap['lastOutcome']; receipts: Receipt[]; journey: Journey; work: WorkState; life: LifeState;
 }
 export function emptySave(): Save {
-  const save:Save={ formatVersion: 4, rulesVersion: 2, contentVersion: 3, id: randomUUID(), revision: 0,
+  const save:Save={ formatVersion: 4, rulesVersion: 2, contentVersion: 4, id: randomUUID(), revision: 0,
     coins: 100, tokens: 0, research: 0, experience: 0, released: 0, inventory: [], catalog: {},
     active: null, pending: null, lastOutcome: null, receipts: [], journey:emptyJourney(), work:emptyWork(),life:emptyLife() };
   refreshLife(save);return save;
@@ -47,7 +47,7 @@ function validCatch(value: unknown, complete = true): asserts value is Catch {
 }
 export function validateSave(value: unknown): asserts value is Save {
   const data = object(value);
-  if (data.formatVersion !== 4 || data.rulesVersion !== 2 || data.contentVersion !== 3) throw new Error('UNSUPPORTED_SAVE_VERSION');
+  if (data.formatVersion !== 4 || data.rulesVersion !== 2 || data.contentVersion !== 4) throw new Error('UNSUPPORTED_SAVE_VERSION');
   id(data.id); integer(data.revision); integer(data.coins, 0, 9999999); integer(data.tokens, 0, 99999);
   integer(data.research); integer(data.experience); integer(data.released);
   if (!Array.isArray(data.inventory) || data.inventory.length > 240) throw new Error('Invalid inventory');
@@ -162,11 +162,11 @@ function validateJourney(value:unknown): void {
 export function upgradeSave(value:unknown): Save {
   const data=structuredClone(object(value));
   if (data.formatVersion===4) {
-    if(data.rulesVersion===2&&data.contentVersion===2)data.contentVersion=3;
+    if(data.rulesVersion===2&&(data.contentVersion===2||data.contentVersion===3))data.contentVersion=4;
     validateSave(data);return data;
   }
   if (data.formatVersion===3 && data.rulesVersion===2 && data.contentVersion===2) {
-    data.formatVersion=4;data.contentVersion=3;data.life=emptyLife();migrateLife(data as unknown as Save);validateSave(data);return data;
+    data.formatVersion=4;data.contentVersion=4;data.life=emptyLife();migrateLife(data as unknown as Save);validateSave(data);return data;
   }
   if (data.formatVersion===2 && data.rulesVersion===2 && data.contentVersion===2) {
     data.formatVersion=3;data.work=emptyWork();return upgradeSave(data);

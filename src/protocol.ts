@@ -8,9 +8,10 @@ import type { LifeState, ShelfItem, FrameId } from './game/life.ts';
 import type { AchievementId } from './game/achievements.ts';
 import type { GuestId } from './game/guests.ts';
 import type { DecorId, DecorSlot } from './game/decor.ts';
-export const VERSION = '0.1.0-rc.4';
+export const VERSION = '0.1.0-rc.5';
 export const API = '/api/dsh-fisher/v1';
 export const COAST_ASSET = `${API}/assets/l01-coast-pixel-v1.webp`;
+export interface PluginPreferences { enabled:boolean; writable:boolean }
 
 export interface RecordEntry { count: number; bestLengthMm: number | null; bestWeightG: number | null; variants: Partial<Record<Variant,number>> }
 export interface ActiveCast {
@@ -69,6 +70,7 @@ export interface InputRequest extends Envelope {
 export interface MutationResult { snapshot: Bootstrap; appliedRevision: number; duplicate: boolean }
 
 export interface GameProps {
+  onEnabledChange?:(enabled:boolean)=>void;
   lowPerformance: boolean;
   reducedMotion?: boolean;
   sound?: boolean;

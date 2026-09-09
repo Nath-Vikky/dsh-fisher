@@ -1,7 +1,7 @@
 import type * as ReactTypes from 'react';
 import { API } from '../protocol.ts';
 import type { Bootstrap } from '../protocol.ts';
-import { REGIONS, SPECIES, isRegionId, isSpeciesId,region } from '../game/content.ts';
+import { REGIONS, SPECIES, isSpeciesId,region } from '../game/content.ts';
 import { BAITS, TIDES, TIDE_NAMES, bait, currentTide, isBaitId, levelInfo, regionUnlocked } from '../game/progression.ts';
 import { GEAR, GEAR_ART,gear } from '../game/gear.ts';
 import { categoryProbabilities, preferenceAvailable } from '../game/encounters.ts';
@@ -12,7 +12,7 @@ import { createScene } from './coast-scene.tsx';
 import { createStorageView } from './storage-view.tsx';
 import { createDialog } from './dialog.tsx';
 import { createHelp,createPager } from './compact-ui.tsx';
-import { BAIT_ART } from '../game/visuals.ts';
+import { BAIT_ART,SCENE_ART } from '../game/visuals.ts';
 import { thumbnailAsset } from '../game/art.ts';
 
 export function createHarbor(React:typeof ReactTypes) {
@@ -40,7 +40,7 @@ export function createHarbor(React:typeof ReactTypes) {
           <label>补给中的鱼饵<select aria-label="补给中的鱼饵" value={supplyBait} disabled={blocked} onChange={event=>{if(SUPPLY_BAITS.some(id=>id===event.target.value))setSupplyBait(event.target.value as SupplyBait);}}>{SUPPLY_BAITS.map(id=><option key={id} value={id}>{bait(id).name} ×2</option>)}</select></label>
           <button className="dsh-fisher-primary" disabled={blocked||!data.work.packs.length||(journey.baits[supplyBait]??0)>9997} onClick={()=>{const packId=data.work.packs[0];if(packId)void controller.action({type:'work.claim',packId,bait:supplyBait});}}>领取 1 包补给</button>
         </>}
-        {section==='location'&&<><label>钓点<select aria-label="钓点" value={journey.region} disabled={blocked||!idle} onChange={event=>{if(isRegionId(event.target.value))void controller.action({type:'location.select',region:event.target.value});}}>{REGIONS.map(item=><option key={item.id} value={item.id} disabled={!regionUnlocked(item.id,data.experience,data.research)}>{item.name}{regionUnlocked(item.id,data.experience,data.research)?'':` · Lv.${item.level} / 研究 ${item.research}`}</option>)}</select></label><p>{region(journey.region).mood}</p><small>{level.needed?`手册升级还需 ${level.needed-level.current} 经验`:'海岸故事继续累积'}</small>{!idle&&<p>处理完这一竿，再调整钓点和装备。</p>}</>}
+        {section==='location'&&<><div className="dsh-fisher-location-grid">{REGIONS.map(item=>{const unlocked=regionUnlocked(item.id,data.experience,data.research),selected=journey.region===item.id;return <button key={item.id} className="dsh-fisher-location-card" aria-label={`前往${item.name}`} aria-pressed={selected} disabled={blocked||!idle||!unlocked||selected} onClick={()=>void controller.action({type:'location.select',region:item.id})}><img src={`${API}/assets/${SCENE_ART[item.id]}`} alt={`${item.name}场景`} loading="lazy"/><strong>{item.name}</strong><small>{selected?'当前码头':unlocked?'前往这里':`Lv.${item.level} · 研究 ${item.research}`}</small></button>;})}</div><p>{region(journey.region).mood}</p><small>{level.needed?`手册升级还需 ${level.needed-level.current} 经验`:'海岸故事继续累积'}</small>{!idle&&<p>处理完这一竿，再调整钓点和装备。</p>}</>}
         {section==='bait'&&<>
           <nav className="dsh-fisher-subtabs" aria-label="鱼饵分类"><button aria-pressed={!baitShop} onClick={()=>{setBaitShop(false);setPage(0);}}>选用鱼饵</button><button aria-pressed={baitShop} onClick={()=>{setBaitShop(true);setPage(0);}}>补充鱼饵</button></nav>
           {!baitShop?<>

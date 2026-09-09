@@ -34,4 +34,4 @@ const gameGzip=gzipSync(await readFile(resolve(root,'lib/game.js'))).length;
 const coldFiles=[SCENE_ART.L01,...PLAYER_ART.idle];
 const coldBytes=(await Promise.all(coldFiles.map(file=>readFile(resolve(directory,file))))).reduce((sum,bytes)=>sum+bytes.length,0);
 assert.ok(entryGzip<=50*1024);assert.ok(gameGzip<=250*1024);assert.ok(coldBytes<=2*1024*1024);assert.ok(total<=24*1024*1024);
-console.log(JSON.stringify({species:48,creatureLooks:108,guests:4,outfits:8,playerFrames:10,gear:14,baits:8,decor:24,scenes:4,runtimeFiles:files.size,runtimeBytes:total,entryGzip,gameGzip,coldSceneBytes:coldBytes},null,2));
+console.log(JSON.stringify({species:SPECIES.length,creatureLooks:SPECIES.filter(entry=>entry.creature).length*VARIANTS.length,guests:4,outfits:8,playerFrames:10,gear:14,baits:8,decor:24,scenes:4,runtimeFiles:files.size,runtimeBytes:total,entryGzip,gameGzip,coldSceneBytes:coldBytes},null,2));

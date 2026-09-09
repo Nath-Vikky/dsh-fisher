@@ -8,7 +8,7 @@ import { rollEncounter } from '../game/encounters.ts';
 import { gear, isGearId } from '../game/gear.ts';
 import { bait, consumeOverride, finishTide, isBaitId, isInventorySpecies, isTide, levelInfo, regionUnlocked } from '../game/progression.ts';
 import { VERSION } from '../protocol.ts';
-import type { ActionRequest, Bootstrap, Envelope, InputRequest, MutationResult,SavePreview } from '../protocol.ts';
+import type { ActionRequest, Bootstrap, Envelope, InputRequest, MutationResult,SavePreview,PluginPreferences } from '../protocol.ts';
 import { emptySave, id, integer, object, validateSave } from './model.ts';
 import type { PrivateCast, Save } from './model.ts';
 import { SaveStore } from './store.ts';
@@ -56,7 +56,7 @@ export class FisherService {
   snapshot(): Bootstrap {
     const { active } = this.save;
     return structuredClone({ protocolVersion: 1, version: VERSION, generation: this.generation, revision: this.save.revision,
-      saveId: this.save.id, gameplayAvailable: !this.stopped && !this.store.issue && !this.writeError,
+      saveId: this.save.id, gameplayAvailable: this.store.pluginEnabled && !this.stopped && !this.store.issue && !this.writeError,
       issue: this.store.issue ?? (this.writeError ? '保存没有完成，已暂停；请重试保存' : null),
       coins: this.save.coins, tokens: this.save.tokens, research: this.save.research, experience: this.save.experience,
       released: this.save.released, inventory: this.save.inventory, catalog: this.save.catalog, journey:this.save.journey,
@@ -66,7 +66,28 @@ export class FisherService {
         challenge: active.challenge, simulation: active.simulation,setup:active.meta } : null,
       pending: this.save.pending, lastOutcome: this.save.lastOutcome });
   }
-  get observingWork(): boolean { return this.save.work.enabled && !this.stopped && !this.writeError && !this.store.issue; }
+  get observingWork(): boolean { return this.store.pluginEnabled && this.save.work.enabled && !this.stopped && !this.writeError && !this.store.issue; }
+  preferences():PluginPreferences {return {enabled:this.store.pluginEnabled,writable:!this.stopped&&this.store.canManage};}
+  setEnabled(value:unknown):Promise<PluginPreferences> {
+    if(this.queued>=256)return Promise.reject(new ActionError('保存队列繁忙，请稍后重试',429));
+    this.queued++;
+    const job=this.tail.then(async()=>{
+      const request=object(value);requireState(typeof request.enabled==='boolean','启停状态不正确');
+      requireState(!this.stopped&&this.store.canManage,'插件设置暂时无法保存');
+      if(this.store.pluginEnabled===request.enabled)return this.preferences();
+      if(!request.enabled){
+        await this.persistWork(this.clock());
+        if(this.save.active&&!this.save.active.paused){
+          const next=structuredClone(this.save),cast=next.active!;
+          cast.paused=true;cast.simulation.reel=false;cast.ownerEpoch++;cast.castRevision++;cast.leaseUntil=0;next.revision++;
+          validateSave(next);await this.store.write(next);this.save=next;
+        }
+      }
+      try{await this.store.setPluginEnabled(request.enabled);this.resetObservation();return this.preferences();}
+      finally{this.notify();}
+    }).finally(()=>{this.queued--;});
+    this.tail=job.catch(()=>{});return job;
+  }
   exportSave():Promise<string> {
     return this.tail.then(()=>{requireState(!this.stopped,'插件已停止');return this.store.issue?this.store.exportOriginal():encodeSave(this.save);});
   }
@@ -147,7 +168,7 @@ export class FisherService {
     this.tail = job.catch(() => {}); return job;
   }
   private async persistWork(at: WorkTime): Promise<void> {
-    if (this.store.issue || this.writeError || !this.save.work.enabled) return;
+    if (!this.store.pluginEnabled || this.store.issue || this.writeError || !this.save.work.enabled) return;
     const next = structuredClone(this.save), prepared = this.prepareWork(next, at);
     if (JSON.stringify(next.work) !== JSON.stringify(this.save.work)) {
       next.revision++; validateSave(next);
@@ -166,6 +187,7 @@ export class FisherService {
   private async perform(value: unknown, input: boolean): Promise<MutationResult> {
     try { validateEnvelope(value); } catch { throw new ActionError('请求格式不正确', 400); }
     requireState(!this.stopped, '插件已停止');
+    requireState(this.store.pluginEnabled,'请先在 DSH 设置中启用摸鱼海岸');
     const hash = fingerprint({ input, value });
     const prior = this.save.receipts.find(item => item.id === value.actionId);
     if (prior) {

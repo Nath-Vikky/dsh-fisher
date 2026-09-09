@@ -12,12 +12,18 @@ export function createHelp(React:typeof ReactTypes) {
       element.setAttribute('popover','manual');
       if(!open)return;
       element.showPopover();
-      const position=()=>{const box=anchor.getBoundingClientRect(),height=element.offsetHeight,width=element.offsetWidth;
-        element.style.left=`${Math.max(12,Math.min(window.innerWidth-width-12,box.right-width))}px`;
-        element.style.top=`${Math.max(12,Math.min(window.innerHeight-height-12,box.bottom+height+12<window.innerHeight?box.bottom+8:box.top-height-8))}px`;};
+      const panel=anchor.closest<HTMLElement>('.dsh-fisher-panel');
+      const position=()=>{
+        const bounds=panel?.getBoundingClientRect()??{left:0,top:0,right:window.innerWidth,bottom:window.innerHeight,width:window.innerWidth,height:window.innerHeight};
+        element.style.width=`${Math.max(1,Math.min(320,bounds.width-24))}px`;element.style.maxHeight=`${Math.max(1,bounds.height-24)}px`;
+        const box=anchor.getBoundingClientRect(),height=element.offsetHeight,width=element.offsetWidth;
+        element.style.left=`${Math.max(bounds.left+12,Math.min(bounds.right-width-12,box.right-width))}px`;
+        element.style.top=`${Math.max(bounds.top+12,Math.min(bounds.bottom-height-12,box.bottom+height+12<bounds.bottom?box.bottom+8:box.top-height-8))}px`;
+      };
       position();const dismiss=(event:PointerEvent)=>{if(event.target instanceof Node&&!element.contains(event.target)&&!anchor.contains(event.target))setOpen(false);};
+      const observer=new MutationObserver(position);if(panel)observer.observe(panel,{attributes:true,attributeFilter:['style']});
       window.addEventListener('resize',position);document.addEventListener('scroll',position,true);document.addEventListener('pointerdown',dismiss);
-      return ()=>{element.hidePopover();window.removeEventListener('resize',position);document.removeEventListener('scroll',position,true);document.removeEventListener('pointerdown',dismiss);};
+      return ()=>{observer.disconnect();element.hidePopover();window.removeEventListener('resize',position);document.removeEventListener('scroll',position,true);document.removeEventListener('pointerdown',dismiss);};
     },[open]);
     return <span className="dsh-fisher-help" onKeyDown={event=>{if(event.key==='Escape'&&open){event.stopPropagation();event.preventDefault();setOpen(false);}}}>
       <button ref={button} type="button" className="dsh-fisher-help-button" aria-label={label} aria-describedby={open?id:undefined} aria-expanded={open}

@@ -40,9 +40,9 @@ async function finish(service:FisherService) {
 }
 
 test('complete catalog, conditional probabilities, pity, variants, and six viable behaviors',()=>{
-  assert.equal(SPECIES.length,48);assert.equal(new Set(SPECIES.map(item=>item.id)).size,48);
-  assert.deepEqual(['fish','abstract','relic','guest'].map(kind=>SPECIES.filter(item=>item.kind===kind).length),[28,12,4,4]);
-  assert.equal(SPECIES.filter(item=>item.creature).length*3,108);assert.equal(GEAR.length,14);assert.equal(BAITS.length,8);
+  assert.equal(SPECIES.length,49);assert.equal(new Set(SPECIES.map(item=>item.id)).size,49);
+  assert.deepEqual(['fish','abstract','relic','guest'].map(kind=>SPECIES.filter(item=>item.kind===kind).length),[28,13,4,4]);
+  assert.equal(SPECIES.filter(item=>item.creature).length*3,111);assert.equal(GEAR.length,14);assert.equal(BAITS.length,8);
   for (const region of REGIONS) assert.deepEqual([1,2,3,4].map(rarity=>SPECIES.filter(item=>item.region===region.id&&item.rarity===rarity).length),[3,2,1,1]);
   assert.deepEqual(categoryProbabilities('L01','B01','calm'),[.9,.07,.03]);
   const odd=categoryProbabilities('L02','B05','odd');assert.ok(Math.abs(odd[1]!-84/156)<1e-12);

@@ -14,6 +14,7 @@ interface View {
 interface Pending { route: 'actions' | 'cast-input'; body: ActionRequest | InputRequest; before?:Bootstrap }
 
 export class GameController {
+  constructor(private readonly onEnabledChange?:(enabled:boolean)=>void){}
   readonly clientId = CLIENT_ID;
   private view: View = { data: null, sim: null, busy: false, paused: true, reel: false, error: null, connected: false, retryPending: false,reward:null };
   private readonly listeners = new Set<() => void>();
@@ -68,7 +69,8 @@ export class GameController {
       stream.addEventListener('revision', event => {
         if (this.disposed || this.stream !== stream) return;
         try {
-          const data = JSON.parse((event as MessageEvent<string>).data) as { generation: string; revision: number; gameplayAvailable: boolean };
+          const data = JSON.parse((event as MessageEvent<string>).data) as { generation: string; revision: number; gameplayAvailable: boolean;pluginEnabled?:boolean };
+          if(typeof data.pluginEnabled==='boolean')this.onEnabledChange?.(data.pluginEnabled);
           this.notification = data;
           const current = this.view.data;
           if (current && (data.generation !== current.generation || data.revision > current.revision || data.gameplayAvailable !== current.gameplayAvailable)) {

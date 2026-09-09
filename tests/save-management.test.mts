@@ -76,22 +76,24 @@ test('delete clears only enumerated game files and a durable reset intent surviv
 });
 
 test('content upgrade preserves a committed encounter and archives the exact old file',async()=>{
-  await fixture(async(directory,open)=>{
+  for(const contentVersion of [2,3])await fixture(async(directory,open)=>{
     const initial=emptySave();initial.journey.tutorialDone=true;initial.journey.completed.L01=10;initial.journey.totalCaught=10;
     initial.journey.bait='B07';initial.journey.target='A001';initial.journey.baits.B07=1;
     await writeFile(join(directory,'save.json'),encodeSave(initial));
     const before=await open();await send(before,{type:'cast.begin',mode:'assisted'});
     const frozen=decodeSave(await before.exportSave()).save;assert.equal(frozen.active?.catch.speciesId,'A001');await before.close();
-    const legacy={...frozen,contentVersion:2};
+    const legacy={...frozen,contentVersion};
     const raw=JSON.stringify({checksum:createHash('sha256').update(JSON.stringify(legacy)).digest('hex'),save:legacy});
     await writeFile(join(directory,'save.json'),raw);
     const upgraded=await open();assert.equal(upgraded.snapshot().gameplayAvailable,true);
-    assert.equal(await readFile(join(directory,'save.before-content3.json'),'utf8'),raw);
+    assert.equal(await readFile(join(directory,contentVersion===2?'save.before-content3.json':'save.before-content4.json'),'utf8'),raw);
     await send(upgraded,{type:'work.enable',enabled:true});
     const current=decodeSave(await upgraded.exportSave()).save;
-    assert.equal(current.contentVersion,3);assert.equal(current.id,frozen.id);
+    assert.equal(current.contentVersion,4);assert.equal(current.id,frozen.id);
     assert.deepEqual(current.active?.catch,frozen.active?.catch);assert.equal(current.active?.seed,frozen.active?.seed);
     assert.deepEqual(current.active?.challenge,frozen.active?.challenge);
+    assert.deepEqual(current.catalog,frozen.catalog);assert.deepEqual(current.life,frozen.life);
+    assert.equal(current.coins,frozen.coins);assert.equal(current.tokens,frozen.tokens);
   });
 });
 

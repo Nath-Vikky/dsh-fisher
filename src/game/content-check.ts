@@ -7,11 +7,11 @@ import { DECOR, DECOR_IDS, THEMES, DECOR_SLOTS } from './decor.ts';
 import { GUESTS, GUEST_IDS } from './guests.ts';
 export function verifyContent(): void {
   const require=(valid:boolean)=>{if(!valid)throw new Error('Invalid fishing content configuration');};
-  require(SPECIES.length===48&&new Set(SPECIES.map(item=>item.id)).size===48);
+  require(SPECIES.length===49&&new Set(SPECIES.map(item=>item.id)).size===49);
   require(SPECIES_IDS.every(id=>SPECIES.some(item=>item.id===id)));
   for (const region of REGIONS) {
     const entries=SPECIES.filter(item=>item.region===region.id);
-    require(entries.length===12&&entries.filter(item=>item.kind==='abstract').length===3
+    require(entries.length===(region.id==='L02'?13:12)&&entries.filter(item=>item.kind==='abstract').length===(region.id==='L02'?4:3)
       &&entries.filter(item=>item.kind==='relic').length===1&&entries.filter(item=>item.kind==='guest').length===1);
     for (const [rarity,count] of [[1,3],[2,2],[3,1],[4,1]]) require(entries.filter(item=>item.rarity===rarity).length===count);
   }
@@ -21,7 +21,7 @@ export function verifyContent(): void {
       &&entry.min>0&&entry.min<entry.mode&&entry.mode<entry.max&&entry.weight>=1);
     else require(entry.min===null&&entry.mode===null&&entry.max===null&&entry.weight===null);
   }
-  require(SPECIES.filter(item=>item.creature).length===36);
+  require(SPECIES.filter(item=>item.creature).length===37);
   require(GEAR.length===14&&new Set(GEAR.map(item=>item.id)).size===14&&GEAR_IDS.every(id=>GEAR.some(item=>item.id===id)));
   require(BAITS.length===8&&new Set(BAITS.map(item=>item.id)).size===8&&BAIT_IDS.every(id=>BAITS.some(item=>item.id===id)));
   for (const item of GEAR) require(Number.isSafeInteger(item.price)&&item.price>=0&&item.level>=1&&item.level<=20);

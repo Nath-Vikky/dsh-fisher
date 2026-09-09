@@ -3,7 +3,7 @@ export type RegionId = typeof REGION_IDS[number];
 export const SPECIES_IDS = [
   'F001','F002','F003','F004','F005','F006','F007','F008','F009','F010','F011','F012','F013','F014',
   'F015','F016','F017','F018','F019','F020','F021','F022','F023','F024','F025','F026','F027','F028',
-  'A001','A002','A003','A004','A005','A006','A007','A008','A009','A010','A011','A012',
+  'A001','A002','A003','A004','A005','A006','A007','A008','A009','A010','A011','A012','A013',
   'R001','R002','R003','R004','G001','G002','G003','G004',
 ] as const;
 export type SpeciesId = typeof SPECIES_IDS[number];
@@ -68,6 +68,7 @@ const abstractRows: readonly AbstractRow[] = [
   ['A010','Doge','L04',40,'heavy',30,120,260,1800,'侧过脸看你一眼，像是已经想好了很多感叹词。'],
   ['A011','卡皮巴拉','L04',60,'pulse',12,45,100,850,'头顶一颗橘子，稳稳地把今天过得很慢。'],
   ['A012','黄金切尔西','L04',80,'rollback',null,null,null,null,'海底也要讲究出场，鞋尖已经接住了灯塔的光。'],
+  ['A013','奶蛙','L02',45,'pulse',12,32,65,900,'草帽还没坐稳，捧着肚子的笑声已经传到码头。'],
 ];
 const otherRows: readonly (readonly [SpeciesId, string, RegionId, 'relic' | 'guest', string])[] = [
   ['R001','旧码头铜铃','L01','relic','锈色下面，还留着第一班渡船的清晨。'],
@@ -76,7 +77,7 @@ const otherRows: readonly (readonly [SpeciesId, string, RegionId, 'relic' | 'gue
   ['R004','灯塔旧信','L04','relic','纸上的海风已经干了，问候还没有。'],
   ['G001','潮汐信使·贝邮','L01','guest','她把未寄出的心事，装进一只防水邮袋。'],
   ['G002','鲸汐·鲸鱼娘','L04','guest','披风拂过水面，像一头温柔的鲸。'],
-  ['G003','奶泡来客·奶娃','L02','guest','一朵认真旅行的奶泡，带着杯沿上的小雨。'],
+  ['G003','奶泡来客·泡芙','L02','guest','一朵认真旅行的奶泡，带着杯沿上的小雨。'],
   ['G004','夜航灯使·萤舟','L03','guest','她照亮水边的小路，也照亮回家的那一段。'],
 ];
 export const SPECIES: readonly Species[] = [
@@ -85,7 +86,7 @@ export const SPECIES: readonly Species[] = [
       kind:'fish',creature:true,poolWeight:1,price:[0,10,18,40,90][rarity]!})),
   ...abstractRows.map(([id,name,region,price,pattern,min,mode,max,weight,description],index): Species =>
     ({id,name,region,price,pattern,min:min===null?null:min*10,mode:mode===null?null:mode*10,max:max===null?null:max*10,
-      weight,description,kind:'abstract',creature:min!==null,rarity:null,poolWeight:[50,30,20][index%3]!,tags:[]})),
+      weight,description,kind:'abstract',creature:min!==null,rarity:null,poolWeight:id==='A013'?30:[50,30,20][index%3]!,tags:[]})),
   ...otherRows.map(([id,name,region,kind,description]): Species =>
     ({id,name,region,kind,description,creature:false,pattern:'steady',rarity:null,poolWeight:1,tags:[],min:null,mode:null,max:null,weight:null,price:0})),
 ];
@@ -128,9 +129,9 @@ export const SPRITES: Record<SpeciesId, Partial<Record<Variant, string>>> = {
   F026:{original:'f026-gemfish-pixel-v1.webp',pearl:'f026-pearl-pixel-v2.webp',starsand:'f026-starsand-pixel-v2.webp'},
   F027:{original:'f027-frilledshark-pixel-v2.webp',pearl:'f027-pearl-pixel-v2.webp',starsand:'f027-starsand-pixel-v2.webp'},
   F028:{original:'f028-oarfish-pixel-v1.webp',pearl:'f028-pearl-pixel-v2.webp',starsand:'f028-starsand-pixel-v2.webp'},
-  A001:{original:'a001-maodie-original-v1.webp',pearl:'a001-maodie-pearl-v2.webp',starsand:'a001-maodie-starsand-v2.webp'},
-  A002:{original:'a002-daodungou-pixel-v3.webp',pearl:'a002-pearl-pixel-v2.webp',starsand:'a002-starsand-pixel-v2.webp'},
-  A003:{original:'a003-dogmilk-original-v1.webp'},
+  A001:{original:'a001-reference-original-v3.webp',pearl:'a001-reference-pearl-v2.webp',starsand:'a001-reference-starsand-v2.webp'},
+  A002:{original:'a002-reference-original-v3.webp',pearl:'a002-reference-pearl-v2.webp',starsand:'a002-reference-starsand-v2.webp'},
+  A003:{original:'a003-reference-original-v3.webp'},
   A004:{original:'a004-bananacat-pixel-v1.webp',pearl:'a004-pearl-pixel-v2.webp',starsand:'a004-starsand-pixel-v2.webp'},
   A005:{original:'a005-maxwell-pixel-v1.webp',pearl:'a005-pearl-pixel-v2.webp',starsand:'a005-starsand-pixel-v1.webp'},
   A006:{original:'a006-woodfish-pixel-v1.webp'},
@@ -139,7 +140,8 @@ export const SPRITES: Record<SpeciesId, Partial<Record<Variant, string>>> = {
   A009:{original:'a009-happycat-pixel-v2.webp',pearl:'a009-pearl-pixel-v2.webp',starsand:'a009-starsand-pixel-v2.webp'},
   A010:{original:'a010-doge-pixel-v2.webp',pearl:'a010-pearl-pixel-v2.webp',starsand:'a010-starsand-pixel-v2.webp'},
   A011:{original:'a011-capybara-pixel-v1.webp',pearl:'a011-pearl-pixel-v2.webp',starsand:'a011-starsand-pixel-v2.webp'},
-  A012:{original:'a012-goldboots-pixel-v1.webp'},R001:{original:'r001-original-v3.webp'},
+  A012:{original:'a012-goldboots-pixel-v1.webp'},
+  A013:{original:'a013-reference-original-v5.webp',pearl:'a013-reference-pearl-v1.webp',starsand:'a013-reference-starsand-v1.webp'},R001:{original:'r001-original-v3.webp'},
   R002:{original:'r002-tidecompass-pixel-v1.webp'},R003:{original:'r003-moonrecord-pixel-v1.webp'},
   R004:{original:'r004-lighthouseletter-pixel-v1.webp'},
   G001:{original:'g001-beiyou-base-chibi-pixel-v2.webp'},G002:{original:'g002-jingxi-base-chibi-pixel-v2.webp'},

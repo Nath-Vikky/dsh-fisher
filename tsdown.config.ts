@@ -17,7 +17,7 @@ const client: UserConfig = {
   format: 'cjs',
   platform: 'browser',
   minify: true,
-  deps: { neverBundle: ['react', /^@deepseek-ai\//] },
+  deps: { neverBundle: ['react', 'react-dom', /^@deepseek-ai\//] },
   outputOptions: {
     entryFileNames: 'client.js',
     banner: 'window.__ModuleLoader__.load({id:"@nath-vikky/dsh-fisher",factory:(require)=>{',
