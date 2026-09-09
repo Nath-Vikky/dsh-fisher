@@ -7,6 +7,13 @@ import { GEAR_ART } from '../game/gear.ts';
 import { drawCoast, coastPoint } from './coast.ts';
 import { SceneArt, drawSprite } from './scene-art.ts';
 
+// Hand positions within each full sprite, shared by all equipped rods.
+const ROD_HANDS={
+  cast:[[.645,.35],[.745,.29]],
+  hold:[[.655,.495],[.655,.495]],
+  reel:[[.64,.395],[.625,.375]],
+} as const;
+
 interface Props { lowPerformance:boolean; paused?:boolean; reducedMotion?:boolean; data:Bootstrap|null; pose?:PlayerPose; quiet?:boolean }
 export function createScene(React:typeof ReactTypes) {
   return function Scene({lowPerformance,paused=false,reducedMotion=false,data,pose='idle',quiet=false}:Props) {
@@ -41,17 +48,27 @@ export function createScene(React:typeof ReactTypes) {
         const playerFrames=PLAYER_ART[current.pose]??[],player=point(.47,.62);
         const actorScale=Math.min(1.6,width/320,Math.max(.65,(player.y-8)/80));
         const staticFrame=current.reducedMotion||reduced.matches||current.paused;
-        const frameName=playerFrames[(staticFrame?0:Math.floor(elapsed*2))%Math.max(1,playerFrames.length)];
-        drawSprite(ctx,artwork.get(frameName),player.x,player.y,80*actorScale,96*actorScale);
-        if(snapshot&&['cast','hold','reel'].includes(current.pose)) {
+        const frameIndex=(staticFrame?0:Math.floor(elapsed*2))%Math.max(1,playerFrames.length);
+        const frameName=playerFrames[frameIndex];
+        if(snapshot&&(current.pose==='cast'||current.pose==='hold'||current.pose==='reel')) {
           const equipped=artwork.get(GEAR_ART[snapshot.journey.loadout.rod]);
           if(equipped) {
-            const gripY=player.y-38*actorScale,rodScale=Math.min(actorScale,Math.max(.2,(gripY-6)/120));
-            ctx.save();ctx.translate(player.x+10*actorScale,gripY);
-            const gesture=current.pose==='cast'?(staticFrame?-.3:Math.floor(elapsed*2)%2?0:-.3):current.pose==='reel'&&!staticFrame?Math.sin(elapsed*4)*.04:0;
-            ctx.rotate(gesture);drawSprite(ctx,equipped,30*rodScale,15*rodScale,112*rodScale,112*rodScale);ctx.restore();
+            const hand=ROD_HANDS[current.pose][frameIndex]??ROD_HANDS[current.pose][0],playerSize=Math.round(80*actorScale);
+            const gripX=Math.round(player.x)+(hand[0]-.5)*playerSize,gripY=Math.round(player.y)+(hand[1]-1)*playerSize;
+            const gesture=current.pose==='cast'?(frameIndex===0?-.3:0):current.pose==='reel'&&!staticFrame?Math.sin(elapsed*4)*.04:0;
+            // Keep the entire rotated rod in the scene without moving its grip away from the hand.
+            const bounds=([[-.35,-.66],[.65,-.66],[-.35,.34],[.65,.34]] as const).map(([x,y])=>({
+              x:x*Math.cos(gesture)-y*Math.sin(gesture),y:x*Math.sin(gesture)+y*Math.cos(gesture),
+            }));
+            const rodSize=Math.max(0,Math.min(112*actorScale,
+              (gripY-6)/-Math.min(...bounds.map(p=>p.y)),(height-6-gripY)/Math.max(...bounds.map(p=>p.y)),
+              (gripX-6)/-Math.min(...bounds.map(p=>p.x)),(width-6-gripX)/Math.max(...bounds.map(p=>p.x))));
+            ctx.save();ctx.translate(gripX,gripY);ctx.rotate(gesture);
+            drawSprite(ctx,equipped,.15*rodSize,.34*rodSize,rodSize,rodSize);ctx.restore();
           }
         }
+        // The player's foreground hand and sleeve cover the handle, rather than the reverse.
+        drawSprite(ctx,artwork.get(frameName),player.x,player.y,80*actorScale,96*actorScale);
         const guestId=snapshot?.life.visitor,guestPosition=point(.28,.67);
         if(guestId)drawSprite(ctx,artwork.get(guestPicture(guestId,snapshot!.life.guests[guestId].outfit,'chibi')),guestPosition.x,guestPosition.y,76*actorScale,84*actorScale);
       };
