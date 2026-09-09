@@ -111,7 +111,10 @@ function createComponents(store: WindowStore,plugin:PluginStore) {
         style={{ ...appearance(view), left: view.x, top: view.y, width: view.width, height: view.height }}
         onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); if(settingsOpen)setSettingsOpen(false);else close(); } }}>
         <header className="dsh-fisher-header" onPointerDown={event => start('move', event)} onPointerMove={move}
-          onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end} onDoubleClick={() => store.reset()}>
+          onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end} onDoubleClick={event => {
+            if ((event.target as Element).closest('button')) return;
+            store.reset();
+          }}>
           <div className="dsh-fisher-brand"><ShoreMark /><div><strong>摸鱼海岸</strong><small>FISHER / COAST NOTES</small></div></div>
           <div className="dsh-fisher-header-actions"><button className="dsh-fisher-header-settings" onClick={()=>setSettingsOpen(value=>!value)} aria-label={settingsOpen?"返回海岸":"打开海岸设置"}>{settingsOpen?"返回":"设置"}</button>
           <button className="dsh-fisher-icon" onClick={close} aria-label="收起摸鱼海岸">×</button></div>
