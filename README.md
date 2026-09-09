@@ -2,7 +2,7 @@
 
 面向 DeepSeek Harness（DSH）Web 的像素钓鱼与收藏插件。工作之余，在岸边慢慢钓一竿。
 
-当前版本为 `0.1.0-rc.7`，可从源码构建并本地安装，尚未发布到 npm。
+当前版本为 `0.1.0-rc.8`，可从源码构建并本地安装，尚未发布到 npm。
 
 ![钓鱼场景](assets/readme/fishing.png)
 
@@ -64,7 +64,7 @@ npm pack --ignore-scripts
 
 ```powershell
 $env:DSH_HOME = Join-Path $PWD 'tmp/dsh-fisher-preview'
-$fisherPackage = Join-Path $PWD 'nath-vikky-dsh-fisher-0.1.0-rc.7.tgz'
+$fisherPackage = Join-Path $PWD 'nath-vikky-dsh-fisher-0.1.0-rc.8.tgz'
 pnpm dlx @deepseek-ai/dsh@0.1.2-rc.1 plugin --profile web add --ignore-scripts $fisherPackage
 pnpm dlx @deepseek-ai/dsh@0.1.2-rc.1 web
 ```

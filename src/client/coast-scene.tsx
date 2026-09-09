@@ -26,7 +26,7 @@ export function createScene(React:typeof ReactTypes) {
     React.useEffect(()=>{art.current?.select(fileRef.current);restart.current();},[fileKey,paused,reducedMotion,data?.revision]);
     React.useEffect(()=>{
       const element=canvas.current,ctx=element?.getContext('2d',{alpha:false});if(!element||!ctx)return;
-      let frame=0,width=0,height=0,last=0,elapsed=0,stopped=false,visible=true;
+      let frame=0,width=0,height=0,pixelRatio=0,last=0,elapsed=0,stopped=false,visible=true;
       const reduced=matchMedia('(prefers-reduced-motion: reduce)');
       const draw=()=>{
         const current=latest.current,snapshot=current.data;
@@ -39,19 +39,21 @@ export function createScene(React:typeof ReactTypes) {
           if(id)drawSprite(ctx,artwork.get(DECOR_ART[id]),position.x,position.y,size,size);
         }
         const playerFrames=PLAYER_ART[current.pose]??[],player=point(.47,.62);
+        const actorScale=Math.min(1.6,width/320,Math.max(.65,(player.y-8)/80));
         const staticFrame=current.reducedMotion||reduced.matches||current.paused;
         const frameName=playerFrames[(staticFrame?0:Math.floor(elapsed*2))%Math.max(1,playerFrames.length)];
-        drawSprite(ctx,artwork.get(frameName),player.x,player.y,80,96);
+        drawSprite(ctx,artwork.get(frameName),player.x,player.y,80*actorScale,96*actorScale);
         if(snapshot&&['cast','hold','reel'].includes(current.pose)) {
           const equipped=artwork.get(GEAR_ART[snapshot.journey.loadout.rod]);
           if(equipped) {
-            ctx.save();ctx.translate(player.x+10,player.y-38);
+            const gripY=player.y-38*actorScale,rodScale=Math.min(actorScale,Math.max(.2,(gripY-6)/120));
+            ctx.save();ctx.translate(player.x+10*actorScale,gripY);
             const gesture=current.pose==='cast'?(staticFrame?-.3:Math.floor(elapsed*2)%2?0:-.3):current.pose==='reel'&&!staticFrame?Math.sin(elapsed*4)*.04:0;
-            ctx.rotate(gesture);drawSprite(ctx,equipped,30,15,112,112);ctx.restore();
+            ctx.rotate(gesture);drawSprite(ctx,equipped,30*rodScale,15*rodScale,112*rodScale,112*rodScale);ctx.restore();
           }
         }
         const guestId=snapshot?.life.visitor,guestPosition=point(.28,.67);
-        if(guestId)drawSprite(ctx,artwork.get(guestPicture(guestId,snapshot!.life.guests[guestId].outfit,'chibi')),guestPosition.x,guestPosition.y,76,84);
+        if(guestId)drawSprite(ctx,artwork.get(guestPicture(guestId,snapshot!.life.guests[guestId].outfit,'chibi')),guestPosition.x,guestPosition.y,76*actorScale,84*actorScale);
       };
       const render=(now:number)=>{
         if(stopped||!visible||document.hidden||latest.current.paused)return;
@@ -69,18 +71,20 @@ export function createScene(React:typeof ReactTypes) {
       };
       const artwork=new SceneArt(start);art.current=artwork;restart.current=start;
       const resize=()=>{
-        const rect=element.getBoundingClientRect();if(rect.width===width&&rect.height===height)return;
-        width=rect.width;height=rect.height;const ratio=1/(lowPerformance?3:2);
-        element.width=Math.max(1,Math.ceil(width*ratio));element.height=Math.max(1,Math.ceil(height*ratio));
-        ctx.setTransform(ratio,0,0,ratio,0,0);start();
+        const rect=element.getBoundingClientRect(),ratio=lowPerformance?1:Math.max(1,Math.min(2,window.devicePixelRatio||1));
+        if(rect.width<=0||rect.height<=0||(rect.width===width&&rect.height===height&&ratio===pixelRatio))return;
+        width=rect.width;height=rect.height;pixelRatio=ratio;
+        // Preserve sprite detail at display resolution; performance mode still keeps one pixel per CSS pixel.
+        element.width=Math.ceil(width*ratio);element.height=Math.ceil(height*ratio);
+        ctx.setTransform(element.width/width,0,0,element.height/height,0,0);start();
       };
       const observer=new ResizeObserver(resize);observer.observe(element);
       const intersection=new IntersectionObserver(entries=>{visible=entries.some(entry=>entry.isIntersecting);start();});intersection.observe(element);
-      document.addEventListener('visibilitychange',start);reduced.addEventListener('change',start);
+      document.addEventListener('visibilitychange',start);reduced.addEventListener('change',start);window.addEventListener('resize',resize);
       artwork.select(fileRef.current);resize();
       return ()=>{
         stopped=true;cancelAnimationFrame(frame);observer.disconnect();intersection.disconnect();artwork.dispose();art.current=undefined;restart.current=()=>{};
-        document.removeEventListener('visibilitychange',start);reduced.removeEventListener('change',start);
+        document.removeEventListener('visibilitychange',start);reduced.removeEventListener('change',start);window.removeEventListener('resize',resize);
       };
     },[lowPerformance,quiet]);
     return <><canvas ref={canvas} aria-label={`${region(location).name}的像素码头${guest?'与岸边来客':''}`} role="img" data-scene-state={artState}/>
