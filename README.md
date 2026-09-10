@@ -38,7 +38,7 @@
 
 游戏不调用模型，不读取聊天正文、工具参数或 Token 数量，钓鱼无需模型 API Key。没有充值、交易或排行榜。
 
-窗口与入口位置偏好保存在当前浏览器。游戏进度和插件启停状态保存在宿主 `$DSH_HOME/fishersave/`；未设置 `DSH_HOME` 时位于用户目录的 `.dsh/fishersave/`，独立于 Codekin。
+窗口与入口位置偏好保存在当前浏览器。游戏进度和插件启停状态保存在宿主 `$DSH_HOME/fishersave/`；未设置 `DSH_HOME` 时位于用户目录的 `.dsh/fishersave/`。
 
 进行中的竿通常每两秒保存，暂停时也会保存。保存失败会暂停操作并提示重试；突然断电可能回退最后一段尚未保存的操作。刷新或重启不会重新抽选已确定的收获。卸载默认保留存档。
 
@@ -83,4 +83,3 @@ pnpm dlx @deepseek-ai/dsh@0.1.2-rc.1 plugin --profile web remove @nath-vikky/dsh
 
 代码及生成美术目前随项目以 `UNLICENSED` 状态维护；尚未授予对外再分发许可。本项目为独立插件。
 
-项目地址：[Nath-Vikky/dsh-fisher](https://github.com/Nath-Vikky/dsh-fisher)。
