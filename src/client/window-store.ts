@@ -20,7 +20,7 @@ const KEY = 'dsh-fisher:window:v1';
 export const presets = { compact: [360, 640], standard: [420, 720], roomy: [480, 820] } as const;
 
 export function createWindowStore() {
-  let launcherWidth=128,launcherHeight=42;
+  let launcherWidth=76,launcherHeight=104;
   const listeners = new Set<() => void>();
   const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
   const fit = (next: WindowState): WindowState => {
@@ -38,13 +38,13 @@ export function createWindowStore() {
   let state: WindowState = fit({ open: false, width: 420, height: 720,
     x: window.innerWidth - 444, y: window.innerHeight - 800, lowPerformance: false,
     theme:'system',fontSize:14,reducedMotion:false,sound:false,volume:.35,aspectLocked:true,aspectRatio:420/720,
-    launcherX:window.innerWidth-220,launcherY:window.innerHeight-62 });
+    launcherX:window.innerWidth-104,launcherY:window.innerHeight-124 });
   try {
     const saved: unknown = JSON.parse(localStorage.getItem(KEY) ?? 'null');
     if (saved !== null && typeof saved === 'object') {
       const row = saved as Record<string, unknown>;
       if(typeof row.launcherWidth==='number'&&row.launcherWidth>=40&&row.launcherWidth<=400)launcherWidth=row.launcherWidth;
-      if(typeof row.launcherHeight==='number'&&row.launcherHeight>=20&&row.launcherHeight<=100)launcherHeight=row.launcherHeight;
+      if(typeof row.launcherHeight==='number'&&row.launcherHeight>=20&&row.launcherHeight<=200)launcherHeight=row.launcherHeight;
       const numeric = (key: 'x' | 'y' | 'width' | 'height'|'launcherX'|'launcherY') =>
         typeof row[key] === 'number' && Number.isFinite(row[key]) ? row[key] : state[key];
       state = fit({ ...state, x: numeric('x'), y: numeric('y'), width: numeric('width'), height: numeric('height'),launcherX:numeric('launcherX'),launcherY:numeric('launcherY'),

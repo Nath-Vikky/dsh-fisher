@@ -2,7 +2,7 @@
 
 面向 DeepSeek Harness（DSH）Web 的像素钓鱼与收藏插件。工作之余，在岸边慢慢钓一竿。
 
-当前版本为 `0.1.0-rc.10`，可从源码构建并本地安装，尚未发布到 npm。
+当前版本为 `0.1.0-rc.11`，可从源码构建并本地安装，尚未发布到 npm。
 
 ![钓鱼场景](assets/readme/fishing.png)
 
@@ -17,7 +17,7 @@
 - 鱼缸展示八个生物，陈列架展示六件奇物或遗物；24 件装饰与七种收获卡样式。收获卡可保存为本地 PNG。
 - 工作补给默认关闭。启用后，仅观察 DSH 新活动的回合边界和事件到达，获得可保留的额外补给。
 - 像素场景与细墨线漫画界面，支持浅深主题、字号、减少动态、低性能设置及默认关闭的轻声提示。
-- 可自由拖动入口按钮；窗口支持拖动、缩放、停靠、尺寸预设、宽高输入、比例锁定和位置恢复。
+- 可自由拖动竖向悬浮入口：默认显示鲸汐半身像与蓝色流水，自动钓鱼时切换为钓竿入水图标，等待活动时静止。窗口支持拖动、缩放、停靠、尺寸预设、宽高输入、比例锁定和位置恢复。
 - DSH 设置中的“摸鱼海岸”分栏提供启停开关；停用会暂停游戏与工作补给，并保留进度。
 - 宿主保存进度；提供存档导出、预览后导入、备份恢复与输入名称后删除。
 
@@ -69,7 +69,7 @@ npm pack --ignore-scripts
 
 ```powershell
 $env:DSH_HOME = Join-Path $PWD 'tmp/dsh-fisher-preview'
-$fisherPackage = Join-Path $PWD 'nath-vikky-dsh-fisher-0.1.0-rc.10.tgz'
+$fisherPackage = Join-Path $PWD 'nath-vikky-dsh-fisher-0.1.0-rc.11.tgz'
 pnpm dlx @deepseek-ai/dsh@0.1.2-rc.1 plugin --profile web add --ignore-scripts $fisherPackage
 pnpm dlx @deepseek-ai/dsh@0.1.2-rc.1 web
 ```

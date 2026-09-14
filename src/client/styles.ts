@@ -6,7 +6,28 @@ export const styles = `
 .dsh-fisher button:active,.dsh-fisher-settings button:active{box-shadow:1px 1px 0 var(--fisher-ink)}
 .dsh-fisher button:focus-visible,.dsh-fisher-settings button:focus-visible,.dsh-fisher-settings input:focus-visible{outline:2px solid #236b7a;outline-offset:4px}
 .dsh-fisher-launcher{position:fixed;z-index:90}.dsh-fisher-launcher button{touch-action:none;user-select:none;cursor:grab;white-space:nowrap}.dsh-fisher-launcher button:active{cursor:grabbing}
-.dsh-fisher .dsh-fisher-open{border-radius:3px;padding:11px 16px;background:var(--fisher-paper);display:flex;gap:10px;align-items:center;font-weight:600;box-shadow:3px 3px 0 var(--fisher-paper),4px 4px 0 var(--fisher-ink)}
+.dsh-fisher .dsh-fisher-open{position:relative;width:76px;height:104px;overflow:hidden;border-radius:2px;padding:4px 4px 0;background:var(--fisher-paper);display:flex;flex-direction:column;gap:0;align-items:stretch;box-shadow:2px 2px 0 var(--fisher-paper),3px 3px 0 var(--fisher-ink)}
+.dsh-fisher .dsh-fisher-open:hover{background:var(--fisher-sea)}.dsh-fisher .dsh-fisher-open[aria-expanded=true]{border-color:#237d9e}
+.dsh-fisher-launcher-picture{position:relative;display:block;flex:1;min-height:0;overflow:hidden;border:1px solid #31556b;background:#acd6e1;isolation:isolate;pointer-events:none}
+.dsh-fisher-launcher-sky{position:absolute;inset:0;background:linear-gradient(150deg,#f3edd1 0%,#d0ecea 42%,#71b4d7 100%)}
+.dsh-fisher-launcher-sky:after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(125deg,transparent 0 7px,#547d901c 7px 8px)}
+.dsh-fisher-launcher-portrait{position:absolute;top:1px;left:50%;width:240%;max-width:none;height:auto;transform:translateX(-50%);image-rendering:pixelated;user-select:none;pointer-events:none}
+.dsh-fisher-launcher-caption{display:block;flex:0 0 18px;font:10px/18px system-ui,"Microsoft YaHei",sans-serif;letter-spacing:.06em;color:var(--fisher-ink);text-align:center;pointer-events:none}
+.dsh-fisher-launcher-water{position:absolute;bottom:-1px;left:0;right:0;height:29px;overflow:hidden;pointer-events:none}
+.dsh-fisher-launcher-wave{position:absolute;width:200%;height:100%;max-width:none;bottom:0;left:0;animation:dsh-fisher-water-flow 6s linear infinite}
+.dsh-fisher-launcher-wave.is-back{opacity:.65;animation-duration:8s;animation-direction:reverse}.dsh-fisher-launcher-wave.is-front{opacity:.74;bottom:-7px}
+.dsh-fisher-launcher-water i{position:absolute;bottom:2px;left:14%;width:3px;height:3px;border:1px solid #d5f8f2;animation:dsh-fisher-water-bubble 4.5s ease-in infinite}
+.dsh-fisher-launcher-water i:nth-of-type(2){left:66%;animation-delay:-2s}.dsh-fisher-launcher-water i:nth-of-type(3){left:87%;width:2px;height:2px;animation-delay:-3.4s}
+.dsh-fisher-launcher-glint{position:absolute;left:4px;top:4px;width:9px;height:9px;border-top:1px solid #f9f5e2;border-left:1px solid #f9f5e2;pointer-events:none}
+.dsh-fisher-launcher-rod{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.dsh-fisher-launcher-bobber{animation:dsh-fisher-float-bob 2.8s ease-in-out infinite}
+.dsh-fisher-launcher-ripple{position:absolute;left:66%;top:76%;width:23%;height:6%;border:1px solid #d4f7ef;border-radius:50%;animation:dsh-fisher-water-ripple 2.8s ease-out infinite}
+.dsh-fisher-launcher[data-status=waiting] .dsh-fisher-launcher-picture *{animation:none}
+@keyframes dsh-fisher-water-flow{to{transform:translateX(-50%)}}
+@keyframes dsh-fisher-water-bubble{0%{transform:translateY(0);opacity:0}25%{opacity:.8}100%{transform:translateY(-23px);opacity:0}}
+@keyframes dsh-fisher-water-ripple{0%{transform:scale(.6);opacity:.8}100%{transform:scale(1.35);opacity:0}}
+@keyframes dsh-fisher-float-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(2px)}}
+@media(prefers-reduced-motion:reduce){.dsh-fisher-launcher *{animation:none!important;transition:none!important}}
 .dsh-fisher-mark{display:block;width:23px;height:23px;flex-shrink:0;shape-rendering:crispEdges}
 .dsh-fisher-panel{position:fixed;z-index:100;display:flex;flex-direction:column;overflow:hidden;background:var(--fisher-paper);border:1px solid var(--fisher-ink);border-radius:4px 4px 2px 2px;box-shadow:4px 4px 0 var(--fisher-paper),5px 5px 0 var(--fisher-ink);min-width:0;min-height:0}
 .dsh-fisher-header{position:relative;display:flex;align-items:center;justify-content:space-between;padding:11px 15px 15px;border-bottom:1px solid var(--fisher-ink);gap:12px;cursor:grab;touch-action:none;user-select:none;flex-shrink:0}

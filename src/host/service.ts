@@ -70,7 +70,13 @@ export class FisherService {
       pending: this.save.pending, lastOutcome: this.save.lastOutcome });
   }
   get observingWork(): boolean { return this.store.pluginEnabled && (this.save.work.enabled||this.save.autoFishing.enabled) && !this.stopped && !this.writeError && !this.store.issue; }
-  preferences():PluginPreferences {return {enabled:this.store.pluginEnabled,writable:!this.stopped&&this.store.canManage};}
+  preferences():PluginPreferences {
+    const automatic=this.save.autoFishing.enabled&&(!this.save.active||!!this.save.active.automatic)&&!this.save.pending;
+    const fishing=this.observingWork&&!!this.save.active?.automatic&&!this.save.autoFishing.reason
+      &&Object.values(this.runtime.roots).some(root=>root.until>this.clock().mono);
+    return {enabled:this.store.pluginEnabled,writable:!this.stopped&&this.store.canManage,
+      launcher:this.store.pluginEnabled&&automatic?fishing?'fishing':'waiting':'shore'};
+  }
   setEnabled(value:unknown):Promise<PluginPreferences> {
     if(this.queued>=256)return Promise.reject(new ActionError('保存队列繁忙，请稍后重试',429));
     this.queued++;

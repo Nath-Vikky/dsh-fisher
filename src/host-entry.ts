@@ -56,7 +56,8 @@ export function apply(ctx: HostContext): void {
     }
     const revisionEvent = () => {
       const state = service.snapshot();
-      return `event: revision\ndata: ${JSON.stringify({ generation: state.generation, revision: state.revision, gameplayAvailable: state.gameplayAvailable, pluginEnabled:service.preferences().enabled })}\n\n`;
+      const preference=service.preferences();
+      return `event: revision\ndata: ${JSON.stringify({ generation: state.generation, revision: state.revision, gameplayAvailable: state.gameplayAvailable, pluginEnabled:preference.enabled,launcher:preference.launcher })}\n\n`;
     };
     const unsubscribe = service.subscribe(() => {
       syncObservation();

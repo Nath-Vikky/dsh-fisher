@@ -12,6 +12,7 @@ import type { WindowState, WindowStore } from './client/window-store.ts';
 import { styles } from './client/styles.ts';
 import { createPluginStore } from './client/plugin-store.ts';
 import type { PluginStore } from './client/plugin-store.ts';
+import { LauncherArt } from './client/launcher-art.tsx';
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap { 'dsh-fisher': 'title'; }
@@ -98,14 +99,14 @@ function createComponents(store: WindowStore,plugin:PluginStore) {
     const end = () => { gesture.current = undefined; store.persist(); };
 
     return <>
-      {preference.ready&&preference.enabled&&<div className="dsh-fisher dsh-fisher-launcher" style={{left:view.launcherX,top:view.launcherY}}>
+      {preference.ready&&preference.enabled&&<div className="dsh-fisher dsh-fisher-launcher" data-theme={view.theme} data-reduced-motion={view.reducedMotion||view.lowPerformance||!preference.visible} data-status={preference.launcher} style={{left:view.launcherX,top:view.launcherY}}>
         <button ref={opener} className="dsh-fisher-open" aria-label="打开摸鱼海岸" aria-expanded={view.open}
-          title="点击打开海岸；拖动可移动入口，聚焦后用方向键微调"
+          title={`${preference.launcher==='fishing'?'自动钓鱼进行中':preference.launcher==='waiting'?'自动钓鱼暂歇，点击查看进度':'摸鱼海岸 · 鲸汐'}；点击打开海岸；拖动可移动入口，聚焦后用方向键微调`}
           onPointerDown={event=>{if(!event.isPrimary||event.button!==0)return;ignoreClick.current=false;launcherDrag.current={pointerId:event.pointerId,startX:event.clientX,startY:event.clientY,x:view.launcherX,y:view.launcherY,moved:false};event.currentTarget.setPointerCapture(event.pointerId);}}
           onPointerMove={event=>{const drag=launcherDrag.current;if(!drag||drag.pointerId!==event.pointerId)return;const dx=event.clientX-drag.startX,dy=event.clientY-drag.startY;if(Math.hypot(dx,dy)>5)drag.moved=true;if(drag.moved){event.preventDefault();store.set({launcherX:drag.x+dx,launcherY:drag.y+dy});}}}
           onPointerUp={endLauncher} onPointerCancel={endLauncher} onLostPointerCapture={endLauncher}
           onKeyDown={event=>{const steps:Record<string,[number,number]>={ArrowLeft:[-10,0],ArrowRight:[10,0],ArrowUp:[0,-10],ArrowDown:[0,10]};const step=steps[event.key];if(step){event.preventDefault();event.stopPropagation();store.set({launcherX:view.launcherX+step[0],launcherY:view.launcherY+step[1]},true);}}}
-          onClick={event => {if(ignoreClick.current&&event.detail!==0){ignoreClick.current=false;return;}store.set({ open: !view.open });}}><ShoreMark />摸鱼海岸</button>
+          onClick={event => {if(ignoreClick.current&&event.detail!==0){ignoreClick.current=false;return;}store.set({ open: !view.open });}}><LauncherArt status={preference.launcher}/></button>
       </div>}
       {preference.enabled&&view.open && <section className="dsh-fisher dsh-fisher-panel" aria-label="摸鱼海岸" role="region" data-theme={view.theme} data-reduced-motion={view.reducedMotion}
         style={{ ...appearance(view), left: view.x, top: view.y, width: view.width, height: view.height }}
