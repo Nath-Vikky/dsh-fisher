@@ -32,13 +32,15 @@ function addActivity(work: WorkState, ms: number, packId: () => string): void {
 
 // Every live lease starts at or before the last settlement: their remaining
 // overlap is a single interval, whose length is the longest remaining lease.
-export function settleWork(work: WorkState, runtime: WorkRuntime, time: WorkTime, packId: () => string): void {
+export function settleWork(work: WorkState, runtime: WorkRuntime, time: WorkTime, packId: () => string, onActivity?:(ms:number)=>void): void {
   const mono = Math.max(runtime.at.mono, time.mono);
-  if (work.enabled) {
+  let activity=0;
+  if (work.enabled||onActivity) {
     let duration = 0;
     for (const [id, root] of Object.entries(runtime.roots)) {
       const elapsed = Math.max(0, Math.min(mono, root.until) - runtime.at.mono);
-      const accepted = Math.min(elapsed, 1_200_000 - root.spent);
+      activity=Math.max(activity,elapsed);
+      const accepted = work.enabled?Math.min(elapsed, 1_200_000 - root.spent):0;
       root.spent += accepted; duration = Math.max(duration, accepted);
       const cursor = work.cursors.find(cursor => cursor.session === id && cursor.turn === root.turn);
       if (cursor) cursor.activeMs = root.spent;
@@ -51,14 +53,15 @@ export function settleWork(work: WorkState, runtime: WorkRuntime, time: WorkTime
     }
     // Wall-clock jumps only move the daily bucket; elapsed time uses the
     // monotonic clock and never synthesizes activity between process runs.
-    advanceDay(work, time.wall);
+    if(work.enabled)advanceDay(work, time.wall);
   }
   runtime.at = { wall: time.wall, mono };
+  if(activity>0)onActivity?.(activity);
 }
 
-export function observeWork(work: WorkState, runtime: WorkRuntime, event: WorkEvent, packId: () => string): void {
-  if (!work.enabled) return;
-  settleWork(work, runtime, event, packId);
+export function observeWork(work: WorkState, runtime: WorkRuntime, event: WorkEvent, packId: () => string, onActivity?:(ms:number)=>void): void {
+  if (!work.enabled&&!onActivity) return;
+  settleWork(work, runtime, event, packId,onActivity);
   if (event.kind === 'dispose') { delete runtime.roots[event.root]; return; }
   const previous = work.cursors.find(cursor => cursor.session === event.session);
   if (event.kind === 'pause') {
@@ -89,7 +92,7 @@ export function observeWork(work: WorkState, runtime: WorkRuntime, event: WorkEv
   if (event.kind === 'end') {
     if (event.endKey && !work.ends.includes(event.endKey)) {
       work.ends.push(event.endKey); work.ends = work.ends.slice(-128);
-      if (root?.turn === event.turn && root.startSeen && event.completed
+      if (work.enabled && root?.turn === event.turn && root.startSeen && event.completed
         && (work.lastCompletionAt === null || event.wall - work.lastCompletionAt >= 60_000)) {
         if (addPoints(work, 5, packId) > 0) work.lastCompletionAt = event.wall;
       }

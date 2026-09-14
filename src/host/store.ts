@@ -86,10 +86,10 @@ export class SaveStore {
     }
     try {
       const save = await readSave(join(this.directory, 'save.json'));
-      if(this.workDisabled)save.work.enabled=false;
+      if(this.workDisabled){save.work.enabled=false;save.autoFishing.enabled=false;}
       const original=await readFile(join(this.directory,'save.json'),'utf8');
       const source=object(object(JSON.parse(original)).save),sourceVersion=source.formatVersion;
-      const backupName=sourceVersion===1||sourceVersion===2||sourceVersion===3?`save.before-v${sourceVersion+1}.json`
+      const backupName=sourceVersion===1||sourceVersion===2||sourceVersion===3||sourceVersion===4?`save.before-v${sourceVersion+1}.json`
         :source.contentVersion===2?'save.before-content3.json':source.contentVersion===3?'save.before-content4.json':null;
       if (!this.issue && backupName) {
         const backupPath=join(this.directory,backupName);
@@ -119,7 +119,7 @@ export class SaveStore {
         return emptySave();
       }
       this.issue = '存档未通过校验，已保留原文件；请先备份后恢复';
-      try { const save=await readSave(join(this.directory,'save.backup.json'));if(this.workDisabled)save.work.enabled=false;this.previous=save;return save; } catch { return emptySave(); }
+      try { const save=await readSave(join(this.directory,'save.backup.json'));if(this.workDisabled){save.work.enabled=false;save.autoFishing.enabled=false;}this.previous=save;return save; } catch { return emptySave(); }
     }
   }
   async setPluginEnabled(enabled:boolean):Promise<void> {
@@ -132,7 +132,7 @@ export class SaveStore {
     const body = encode(save);
     if (this.previous) await atomicFile(join(this.directory, 'save.backup.json'), encode(this.previous));
     await atomicFile(join(this.directory, 'save.json'), body);
-    if(this.workDisabled&&save.work.enabled) {
+    if(this.workDisabled&&(save.work.enabled||save.autoFishing.enabled)) {
       try{await unlink(join(this.directory,'disabled.json'));}catch(error){if(errorCode(error)!=='ENOENT')throw error;}
       this.workDisabled=false;
     }
@@ -157,7 +157,7 @@ export class SaveStore {
   }
   async replace(save:Save):Promise<void> {
     if(!this.canManage||this.pendingReset)throw new Error('STORE_NOT_WRITABLE');
-    const body=encode(save);if(save.work.enabled)throw new Error('IMPORT_MUST_DISABLE_WORK');
+    const body=encode(save);if(save.work.enabled||save.autoFishing.enabled)throw new Error('IMPORT_MUST_DISABLE_WORK');
     try {
       await this.preserveOriginal();await this.suppressWork();
       await atomicFile(join(this.directory,'save.backup.json'),encode(this.previous??save));
@@ -167,11 +167,11 @@ export class SaveStore {
   }
   async reset(save:Save):Promise<void> {
     if(!this.canManage)throw new Error('STORE_NOT_WRITABLE');
-    const body=encode(save);if(save.work.enabled)throw new Error('RESET_MUST_DISABLE_WORK');
+    const body=encode(save);if(save.work.enabled||save.autoFishing.enabled)throw new Error('RESET_MUST_DISABLE_WORK');
     try {
       await this.suppressWork(save.id);
       // The durable reset intent precedes removal of this plugin's enumerated save files.
-      const owned=/^save(?:\.backup|\.before-v[234]|\.before-content[34]|\.before-restore\.[12])?\.json(?:\.[0-9a-f-]{36}\.tmp)?$/;
+      const owned=/^save(?:\.backup|\.before-v[2345]|\.before-content[34]|\.before-restore\.[12])?\.json(?:\.[0-9a-f-]{36}\.tmp)?$/;
       for(const name of await readdir(this.directory))if(owned.test(name))await unlink(join(this.directory,name));
       await atomicFile(join(this.directory,'save.backup.json'),body);
       await atomicFile(join(this.directory,'save.json'),body);

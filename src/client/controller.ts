@@ -100,7 +100,7 @@ export class GameController {
     const owns = data.active?.owner === this.clientId;
     if (this.notification?.generation === data.generation && this.notification.revision <= data.revision
       && this.notification.gameplayAvailable === data.gameplayAvailable) this.refreshRequested = false;
-    if (!owns || data.active?.paused || !data.gameplayAvailable) this.stopClock();
+    if (!owns || data.active?.paused || data.active?.automatic || !data.gameplayAvailable) this.stopClock();
     this.publish({ data, paused: !this.running });
   }
   private envelope(): Envelope {
@@ -111,7 +111,7 @@ export class GameController {
   }
   async action(action: Action): Promise<void> {
     if (this.view.busy || this.pending || !this.view.data || this.disposed) return;
-    if (action.type === 'cast.begin' || action.type === 'cast.resume') this.pauseRequested = false;
+    if (action.type === 'cast.begin' || action.type === 'cast.resume' || action.type==='auto.takeover') this.pauseRequested = false;
     this.pending = { route: 'actions', body: { ...this.envelope(), action },before:this.view.data };
     await this.send();
   }
@@ -120,7 +120,7 @@ export class GameController {
     this.publish({ reel });
   }
   private startClock(): void {
-    if (this.disposed || document.hidden || this.pauseRequested || !this.view.data?.active || this.view.data.active.owner !== this.clientId) return;
+    if (this.disposed || document.hidden || this.pauseRequested || !this.view.data?.active || this.view.data.active.automatic || this.view.data.active.owner !== this.clientId) return;
     cancelAnimationFrame(this.frame);
     this.running = true; this.lastFrame = performance.now(); this.lastCheckpoint = this.lastFrame; this.accumulator = 0;
     this.publish({ paused: false });
@@ -157,12 +157,12 @@ export class GameController {
   pause(): void {
     this.pauseRequested = true; this.stopClock(); this.publish();
     const cast = this.view.data?.active;
-    if (cast?.owner === this.clientId && !cast.paused && !this.view.busy && !this.pending) void this.checkpoint('pause');
+    if (cast?.owner === this.clientId && !cast.automatic && !cast.paused && !this.view.busy && !this.pending) void this.checkpoint('pause');
   }
   private async checkpoint(command: InputRequest['command']): Promise<void> {
     const cast = this.view.data?.active;
     const sim = this.view.sim;
-    if (!cast || !sim || cast.owner !== this.clientId || cast.paused || this.view.busy || this.pending) return;
+    if (!cast || !sim || cast.automatic || cast.owner !== this.clientId || cast.paused || this.view.busy || this.pending) return;
     this.lastCheckpoint = performance.now();
     this.pending = { route: 'cast-input', body: { ...this.envelope(), castId: cast.id, ownerEpoch: cast.ownerEpoch,
       expectedCastRevision: cast.castRevision, fromTick: cast.simulation.tick, inputCursor: cast.inputCursor,
@@ -204,7 +204,7 @@ export class GameController {
       const cast = this.view.data?.active;
       if ((this.pauseRequested || this.disposed || document.hidden) && cast?.owner === this.clientId && !cast.paused) {
         await this.checkpoint('pause');
-      } else if (pending.route === 'actions' && 'action' in pending.body && ['cast.begin', 'cast.resume'].includes(pending.body.action.type)) this.startClock();
+      } else if (pending.route === 'actions' && 'action' in pending.body && ['cast.begin', 'cast.resume','auto.takeover'].includes(pending.body.action.type)) this.startClock();
       else if (!cast) { this.stopClock(); this.publish(); }
     }
     if (this.refreshRequested && !this.disposed) { this.refreshRequested = false; void this.connect(); }

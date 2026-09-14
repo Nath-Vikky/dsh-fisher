@@ -29,7 +29,7 @@ test('save files reject corruption, excessive size and future formats before rep
   assert.throws(()=>decodeSave(original.replace('"coins":100','"coins":999')),/CHECKSUM/);
   assert.throws(()=>decodeSave(' '.repeat(MAX_SAVE_BYTES+1)),/TOO_LARGE/);
   await fixture(async(directory,open)=>{
-    const future=original.replace('"formatVersion":4','"formatVersion":999');await writeFile(join(directory,'save.json'),future);
+    const future=original.replace('"formatVersion":5','"formatVersion":999');await writeFile(join(directory,'save.json'),future);
     const service=await open();assert.equal(service.snapshot().gameplayAvailable,false);
     assert.equal(await service.exportSave(),future);assert.equal(await readFile(join(directory,'save.json'),'utf8'),future);
     await assert.rejects(service.previewSave({source:'file',text:future}));
@@ -59,13 +59,13 @@ test('import preserves a committed encounter, disables observation, invalidates 
 test('delete clears only enumerated game files and a durable reset intent survives restart',async()=>{
   await fixture(async(directory,open)=>{
     let service=await open();await send(service,{type:'work.enable',enabled:true});
-    await writeFile(join(directory,'save.before-v4.json'),await service.exportSave());
+    await writeFile(join(directory,'save.before-v5.json'),await service.exportSave());
     await writeFile(join(directory,'save.before-content3.json'),await service.exportSave());await writeFile(join(directory,'saveXbackupYjson'),'keep');
     const original=await readFile(join(directory,'save.json'),'utf8');await assert.rejects(send(service,{type:'save.delete',confirmation:'删除'}));
     assert.equal(await readFile(join(directory,'save.json'),'utf8'),original);
     const deletion=request(service,{type:'save.delete',confirmation:'删除摸鱼海岸'});await service.mutate(deletion,false);
     assert.equal((await service.mutate(deletion,false)).duplicate,true);assert.equal(service.snapshot().coins,100);assert.equal(service.snapshot().work.enabled,false);
-    await assert.rejects(readFile(join(directory,'save.before-v4.json')),/ENOENT/);
+    await assert.rejects(readFile(join(directory,'save.before-v5.json')),/ENOENT/);
     await assert.rejects(readFile(join(directory,'save.before-content3.json')),/ENOENT/);assert.equal(await readFile(join(directory,'saveXbackupYjson'),'utf8'),'keep');
     await send(service,{type:'work.enable',enabled:true});await service.close();
     const resetId=randomUUID();await writeFile(join(directory,'disabled.json'),JSON.stringify({version:1,workDisabled:true,resetId}));
@@ -82,11 +82,11 @@ test('content upgrade preserves a committed encounter and archives the exact old
     await writeFile(join(directory,'save.json'),encodeSave(initial));
     const before=await open();await send(before,{type:'cast.begin',mode:'assisted'});
     const frozen=decodeSave(await before.exportSave()).save;assert.equal(frozen.active?.catch.speciesId,'A001');await before.close();
-    const legacy={...frozen,contentVersion};
+    const {autoFishing:_,...older}=frozen;const legacy={...older,formatVersion:4,contentVersion};
     const raw=JSON.stringify({checksum:createHash('sha256').update(JSON.stringify(legacy)).digest('hex'),save:legacy});
     await writeFile(join(directory,'save.json'),raw);
     const upgraded=await open();assert.equal(upgraded.snapshot().gameplayAvailable,true);
-    assert.equal(await readFile(join(directory,contentVersion===2?'save.before-content3.json':'save.before-content4.json'),'utf8'),raw);
+    assert.equal(await readFile(join(directory,'save.before-v5.json'),'utf8'),raw);
     await send(upgraded,{type:'work.enable',enabled:true});
     const current=decodeSave(await upgraded.exportSave()).save;
     assert.equal(current.contentVersion,4);assert.equal(current.id,frozen.id);

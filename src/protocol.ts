@@ -8,7 +8,8 @@ import type { LifeState, ShelfItem, FrameId } from './game/life.ts';
 import type { AchievementId } from './game/achievements.ts';
 import type { GuestId } from './game/guests.ts';
 import type { DecorId, DecorSlot } from './game/decor.ts';
-export const VERSION = '0.1.0-rc.9';
+import type { AutoCast,AutoFishingView } from './game/auto-fishing.ts';
+export const VERSION = '0.1.0-rc.10';
 export const API = '/api/dsh-fisher/v1';
 export const COAST_ASSET = `${API}/assets/l01-coast-pixel-v1.webp`;
 export interface PluginPreferences { enabled:boolean; writable:boolean }
@@ -16,13 +17,13 @@ export interface PluginPreferences { enabled:boolean; writable:boolean }
 export interface RecordEntry { count: number; bestLengthMm: number | null; bestWeightG: number | null; variants: Partial<Record<Variant,number>> }
 export interface ActiveCast {
   id: string; owner: string; ownerEpoch: number; leaseUntil: number; castRevision: number; inputCursor: number;
-  paused: boolean; challenge: Challenge; simulation: Simulation; setup?: EncounterMeta;
+  paused: boolean; challenge: Challenge; simulation: Simulation; setup?: EncounterMeta; automatic?:AutoCast|null;
 }
 export interface Bootstrap {
   protocolVersion: 1; version: string; generation: string; revision: number; saveId: string;
   gameplayAvailable: boolean; issue: string | null; coins: number; tokens: number; research: number;
   experience: number; released: number; inventory: Catch[]; catalog: Partial<Record<SpeciesId, RecordEntry>>;
-  journey: Journey; work: WorkView; life:LifeState;
+  journey: Journey; work: WorkView; life:LifeState; autoFishing:AutoFishingView;
   storage:{canManage:boolean};
   active: ActiveCast | null; pending: Catch | null; lastOutcome: 'escaped' | 'cancelled' | null;
 }
@@ -43,6 +44,9 @@ export type Action =
   | { type: 'tide.choose'; tide: Tide }
   | { type: 'work.enable'; enabled: boolean }
   | { type: 'work.claim'; packId: string; bait: SupplyBait }
+  | { type: 'auto.enable'; enabled:boolean }
+  | { type: 'auto.takeover'; castId:string }
+  | { type: 'auto.ack'; through:number }
   | { type: 'quest.accept'|'quest.skip'; questId:string }
   | { type: 'quest.claim'; questId:string; catchIds?:string[]; confirmed?:boolean }
   | { type: 'achievement.claim'; achievement:AchievementId }
@@ -82,7 +86,7 @@ export function isBootstrap(value: unknown): value is Bootstrap {
   const data = value as Record<string, unknown>;
   return data.protocolVersion === 1 && typeof data.version === 'string' && typeof data.generation === 'string'
     && typeof data.saveId === 'string' && Number.isSafeInteger(data.revision) && typeof data.gameplayAvailable === 'boolean'
-    && Number.isSafeInteger(data.coins) && Array.isArray(data.inventory) && !!data.catalog && !!data.journey && !!data.work && !!data.life
+    && Number.isSafeInteger(data.coins) && Array.isArray(data.inventory) && !!data.catalog && !!data.journey && !!data.work && !!data.life && !!data.autoFishing
     && typeof data.storage==='object' && data.storage!==null && typeof (data.storage as Record<string,unknown>).canManage==='boolean'
     && 'active' in data && 'pending' in data;
 }

@@ -13,21 +13,23 @@ import type { WorkState } from '../game/work.ts';
 import { emptyLife, migrateLife, refreshLife } from '../game/life.ts';
 import type { LifeState } from '../game/life.ts';
 import { validateLife } from './life-validation.ts';
+import { emptyAutoFishing,autoFishingDuration } from '../game/auto-fishing.ts';
+import type { AutoFishingState } from '../game/auto-fishing.ts';
 import { object, integer, id } from './validation.ts';
 export { object, integer, id } from './validation.ts';
 
 export interface PrivateCast extends ActiveCast { seed: number; catch: Catch; meta: EncounterMeta }
 export interface Receipt { id: string; fingerprint: string; revision: number }
 export interface Save {
-  formatVersion: 4; rulesVersion: 2; contentVersion: 4; id: string; revision: number;
+  formatVersion: 5; rulesVersion: 2; contentVersion: 4; id: string; revision: number;
   coins: number; tokens: number; research: number; experience: number; released: number;
   inventory: Catch[]; catalog: Bootstrap['catalog']; active: PrivateCast | null; pending: Catch | null;
-  lastOutcome: Bootstrap['lastOutcome']; receipts: Receipt[]; journey: Journey; work: WorkState; life: LifeState;
+  lastOutcome: Bootstrap['lastOutcome']; receipts: Receipt[]; journey: Journey; work: WorkState; life: LifeState; autoFishing:AutoFishingState;
 }
 export function emptySave(): Save {
-  const save:Save={ formatVersion: 4, rulesVersion: 2, contentVersion: 4, id: randomUUID(), revision: 0,
+  const save:Save={ formatVersion: 5, rulesVersion: 2, contentVersion: 4, id: randomUUID(), revision: 0,
     coins: 100, tokens: 0, research: 0, experience: 0, released: 0, inventory: [], catalog: {},
-    active: null, pending: null, lastOutcome: null, receipts: [], journey:emptyJourney(), work:emptyWork(),life:emptyLife() };
+    active: null, pending: null, lastOutcome: null, receipts: [], journey:emptyJourney(), work:emptyWork(),life:emptyLife(),autoFishing:emptyAutoFishing() };
   refreshLife(save);return save;
 }
 function boolean(value: unknown): void { if (typeof value !== 'boolean') throw new Error('Invalid boolean'); }
@@ -47,7 +49,7 @@ function validCatch(value: unknown, complete = true): asserts value is Catch {
 }
 export function validateSave(value: unknown): asserts value is Save {
   const data = object(value);
-  if (data.formatVersion !== 4 || data.rulesVersion !== 2 || data.contentVersion !== 4) throw new Error('UNSUPPORTED_SAVE_VERSION');
+  if (data.formatVersion !== 5 || data.rulesVersion !== 2 || data.contentVersion !== 4) throw new Error('UNSUPPORTED_SAVE_VERSION');
   id(data.id); integer(data.revision); integer(data.coins, 0, 9999999); integer(data.tokens, 0, 99999);
   integer(data.research); integer(data.experience); integer(data.released);
   if (!Array.isArray(data.inventory) || data.inventory.length > 240) throw new Error('Invalid inventory');
@@ -96,6 +98,11 @@ export function validateSave(value: unknown): asserts value is Save {
     if (sim.peakDanger!==undefined) integer(sim.peakDanger,sim.danger as number,300000);
     if (!['casting', 'waiting', 'bite', 'fighting','recovery'].includes(String(sim.phase))) throw new Error('Invalid active phase');
     if (sim.phase==='recovery' && (sim.fightTicks!==3600 || cast.paused!==true)) throw new Error('Invalid recovery');
+    if(cast.automatic!==null&&cast.automatic!==undefined){
+      const auto=object(cast.automatic),duration=autoFishingDuration(cast.catch as Catch);
+      if(auto.requiredMs!==duration||cast.paused!==true||sim.phase!=='waiting'||sim.tick!==0||sim.fightTicks!==0||sim.progress!==0)throw new Error('Invalid automatic cast');
+      integer(auto.elapsedMs,0,duration-1);
+    }
   }
   if (data.lastOutcome !== null && data.lastOutcome !== 'escaped' && data.lastOutcome !== 'cancelled') throw new Error('Invalid outcome');
   if (!Array.isArray(data.receipts) || data.receipts.length > 128) throw new Error('Invalid receipts');
@@ -110,6 +117,11 @@ export function validateSave(value: unknown): asserts value is Save {
   validateJourney(data.journey);
   validateWork(data.work);
   validateLife(data.life,data as unknown as Save);
+  const auto=object(data.autoFishing);boolean(auto.enabled);integer(auto.caught);integer(auto.seen,0,auto.caught as number);
+  if(auto.reason!==null&&(typeof auto.reason!=='string'||auto.reason.length>160))throw new Error('Invalid automatic fishing status');
+  if(!Array.isArray(auto.recent)||auto.recent.length>12||auto.recent.length>(auto.caught as number))throw new Error('Invalid automatic catch history');
+  for(const item of auto.recent)validCatch(item);
+  if(new Set(auto.recent.map(item=>(item as Catch).id)).size!==auto.recent.length)throw new Error('Duplicate automatic catch history');
   for(const item of data.inventory as Catch[])if(item.order!==undefined)integer(item.order,1,(data.journey as Journey).totalCaught);
   if(data.pending&&(data.pending as Catch).order!==undefined)integer((data.pending as Catch).order,1,(data.journey as Journey).totalCaught);
 }
@@ -161,12 +173,13 @@ function validateJourney(value:unknown): void {
 
 export function upgradeSave(value:unknown): Save {
   const data=structuredClone(object(value));
+  if(data.formatVersion===5){validateSave(data);return data;}
   if (data.formatVersion===4) {
     if(data.rulesVersion===2&&(data.contentVersion===2||data.contentVersion===3))data.contentVersion=4;
-    validateSave(data);return data;
+    data.formatVersion=5;data.autoFishing=emptyAutoFishing();validateSave(data);return data;
   }
   if (data.formatVersion===3 && data.rulesVersion===2 && data.contentVersion===2) {
-    data.formatVersion=4;data.contentVersion=4;data.life=emptyLife();migrateLife(data as unknown as Save);validateSave(data);return data;
+    data.formatVersion=4;data.contentVersion=4;data.life=emptyLife();migrateLife(data as unknown as Save);return upgradeSave(data);
   }
   if (data.formatVersion===2 && data.rulesVersion===2 && data.contentVersion===2) {
     data.formatVersion=3;data.work=emptyWork();return upgradeSave(data);

@@ -19,6 +19,8 @@ import type { WorkEvent, WorkRuntime, WorkTime } from './work-runtime.ts';
 import { recordLifeEvent, refreshLife } from '../game/life.ts';
 import { applyLifeAction } from './life-actions.ts';
 import { ActionError, award, requireDisposable, requireState } from './actions-common.ts';
+import { autoFishingDuration } from '../game/auto-fishing.ts';
+import type { Mode } from '../game/engine.ts';
 export { ActionError } from './actions-common.ts';
 
 export const workClock = (): WorkTime => ({ wall: Date.now(), mono: Math.floor(performance.now()) });
@@ -61,12 +63,13 @@ export class FisherService {
       coins: this.save.coins, tokens: this.save.tokens, research: this.save.research, experience: this.save.experience,
       released: this.save.released, inventory: this.save.inventory, catalog: this.save.catalog, journey:this.save.journey,
       work: workView(this.save.work, this.clock().wall), life: this.save.life,storage:{canManage:this.store.canManage},
+      autoFishing:{...this.save.autoFishing,working:this.observingWork&&this.save.autoFishing.enabled&&Object.values(this.runtime.roots).some(root=>root.until>this.clock().mono)},
       active: active ? { id: active.id, owner: active.owner, ownerEpoch: active.ownerEpoch, leaseUntil: active.leaseUntil,
         castRevision: active.castRevision, inputCursor: active.inputCursor, paused: active.paused,
-        challenge: active.challenge, simulation: active.simulation,setup:active.meta } : null,
+        challenge: active.challenge, simulation: active.simulation,setup:active.meta,automatic:active.automatic??null } : null,
       pending: this.save.pending, lastOutcome: this.save.lastOutcome });
   }
-  get observingWork(): boolean { return this.store.pluginEnabled && this.save.work.enabled && !this.stopped && !this.writeError && !this.store.issue; }
+  get observingWork(): boolean { return this.store.pluginEnabled && (this.save.work.enabled||this.save.autoFishing.enabled) && !this.stopped && !this.writeError && !this.store.issue; }
   preferences():PluginPreferences {return {enabled:this.store.pluginEnabled,writable:!this.stopped&&this.store.canManage};}
   setEnabled(value:unknown):Promise<PluginPreferences> {
     if(this.queued>=256)return Promise.reject(new ActionError('保存队列繁忙，请稍后重试',429));
@@ -101,7 +104,7 @@ export class FisherService {
       requireState(typeof text==='string','请选择 JSON 存档文件');
       let decoded:ReturnType<typeof decodeSave>;
       try{decoded=decodeSave(text);}catch(error){throw new ActionError(error instanceof Error&&error.message==='UNSUPPORTED_SAVE_VERSION'?'这是其他版本的存档，原文件未修改':error instanceof Error&&error.message==='SAVE_TOO_LARGE'?'存档超过 2 MiB 上限':'存档内容或校验和不正确，原文件未修改',400);}
-      const save=decoded.save;save.id=randomUUID();save.revision=0;save.receipts=[];save.work.enabled=false;
+      const save=decoded.save;save.id=randomUUID();save.revision=0;save.receipts=[];save.work.enabled=false;save.autoFishing.enabled=false;
       if(save.active){save.active.owner=randomUUID();save.active.ownerEpoch=1;save.active.castRevision=0;save.active.leaseUntil=0;save.active.paused=true;}
       validateSave(save);
       const now=Date.now();for(const [key,entry] of this.previews)if(!entry.started&&entry.summary.expiresAt<now)this.previews.delete(key);
@@ -139,15 +142,21 @@ export class FisherService {
       this.pendingWork.splice(replace, 1);
     }
     this.pendingWork.push(event);
+    this.scheduleWork();
+  }
+  private scheduleWork():void {
+    if(!this.observingWork||(!this.pendingWork.length&&!(this.save.autoFishing.enabled&&Object.values(this.runtime.roots).some(root=>root.until>this.clock().mono))))return;
     if (this.workTimer === undefined) {
-      this.workTimer = setTimeout(() => { this.workTimer = undefined; void this.flushWork(); }, 5000);
+      this.workTimer = setTimeout(() => { this.workTimer = undefined; void this.flushWork().catch(()=>{this.writeError=true;this.resetObservation();this.notify();}); }, 5000);
       this.workTimer.unref();
     }
   }
   private prepareWork(save: Save, at: WorkTime): { runtime: WorkRuntime; consumed: number } {
     const runtime = structuredClone(this.runtime), consumed = this.pendingWork.length;
-    for (const event of this.pendingWork) observeWork(save.work, runtime, event, randomUUID);
-    settleWork(save.work, runtime, at, randomUUID);
+    const advance=save.autoFishing.enabled?(ms:number)=>this.advanceAutomatic(save,ms):undefined;
+    for (const event of this.pendingWork) observeWork(save.work, runtime, event, randomUUID,advance);
+    settleWork(save.work, runtime, at, randomUUID,advance);
+    refreshLife(save);
     return { runtime, consumed };
   }
   private commitWork(prepared: { runtime: WorkRuntime; consumed: number }, reset = false, at = this.clock()): void {
@@ -155,6 +164,7 @@ export class FisherService {
     this.runtime = prepared.runtime;
     if (reset) this.resetObservation(at);
     if (!this.pendingWork.length && this.workTimer !== undefined) { clearTimeout(this.workTimer); this.workTimer = undefined; }
+    this.scheduleWork();
   }
   private resetObservation(at = this.clock()): void {
     this.epoch++; this.pendingWork = []; this.runtime = emptyWorkRuntime(at);
@@ -168,9 +178,9 @@ export class FisherService {
     this.tail = job.catch(() => {}); return job;
   }
   private async persistWork(at: WorkTime): Promise<void> {
-    if (!this.store.pluginEnabled || this.store.issue || this.writeError || !this.save.work.enabled) return;
+    if (!this.store.pluginEnabled || this.store.issue || this.writeError || !(this.save.work.enabled||this.save.autoFishing.enabled)) return;
     const next = structuredClone(this.save), prepared = this.prepareWork(next, at);
-    if (JSON.stringify(next.work) !== JSON.stringify(this.save.work)) {
+    if (JSON.stringify(next) !== JSON.stringify(this.save)) {
       next.revision++; validateSave(next);
       try { await this.store.write(next); }
       catch { this.writeError = true; this.resetObservation(); this.notify(); return; }
@@ -207,7 +217,7 @@ export class FisherService {
     requireState(!this.writeError, '保存没有完成，请先重试保存');
     if (!input) requireState(value.expectedRevision === this.save.revision, '状态已更新，请重新操作');
     const next = structuredClone(this.save);
-    const at = this.clock(), prepared = this.prepareWork(next, at), wasEnabled = this.save.work.enabled;
+    const at = this.clock(), prepared = this.prepareWork(next, at), wasEnabled = this.save.work.enabled,wasAutomatic=this.save.autoFishing.enabled;
     try {
       if (input) this.applyInput(next, value as InputRequest);
       else this.applyAction(next, request);
@@ -223,7 +233,7 @@ export class FisherService {
     try { await this.store.write(next); }
     catch { this.writeError = true; this.resetObservation(); this.notify(); throw new ActionError('保存没有完成，收入与收获尚未结算', 503); }
     this.save = next;
-    this.commitWork(prepared, wasEnabled !== next.work.enabled, at);
+    this.commitWork(prepared, wasEnabled !== next.work.enabled||wasAutomatic!==next.autoFishing.enabled, at);
     this.notify();
     return { snapshot: this.snapshot(), appliedRevision: next.revision, duplicate: false };
   }
@@ -233,27 +243,15 @@ export class FisherService {
     switch (action.type) {
       case 'cast.begin': {
         requireState(!save.active && !save.pending, '请先处理这一竿');
+        requireState(!save.autoFishing.enabled,'请先关闭自动钓鱼，或接管当前这一竿');
         requireState(action.mode === 'standard' || action.mode === 'assisted', '请选择有效模式');
-        const castId = randomUUID();
-        const seed = randomBytes(4).readUInt32LE();
-        const journey=save.journey;
-        requireState(regionUnlocked(journey.region,save.experience,save.research),'这个钓点还未解锁');
-        requireState(journey.bait==='B01'||journey.bait==='B08'||(journey.baits[journey.bait]??0)>0,'鱼饵用完了，请补充或换普通面团');
-        let selected: ReturnType<typeof rollEncounter>;
-        try { selected=rollEncounter(seed,castId,action.mode,journey,Object.keys(save.catalog) as SpeciesId[]); }
-        catch (error) { throw new ActionError(error instanceof Error?error.message:'没有匹配的候选'); }
-        if (journey.bait==='B08') journey.invitations=journey.invitations.filter(item=>item!==selected.catch.speciesId);
-        else if (journey.bait!=='B01') journey.baits[journey.bait]!--;
-        consumeOverride(journey);
-        save.active = { id: castId, seed, catch: selected.catch, challenge: selected.challenge, meta:selected.meta,
-          owner: clientId, ownerEpoch: 1, leaseUntil: Date.now() + 15000, castRevision: 0, inputCursor: 0,
-          paused: false, simulation: initialSimulation() };
-        save.lastOutcome = null;
+        this.beginCast(save,clientId,action.mode);
         break;
       }
       case 'cast.resume': {
         const cast = save.active;
         requireState(cast && cast.id === id(action.castId), '这一竿已经结束');
+        requireState(!cast.automatic,'请点击接管这一竿，或继续自动钓鱼');
         requireState(cast.simulation.phase!=='recovery','这一竿需要恢复收获');
         cast.owner = clientId; cast.ownerEpoch++; cast.leaseUntil = Date.now() + 15000;
         cast.paused = false; cast.simulation.reel = false; cast.castRevision++;
@@ -262,10 +260,11 @@ export class FisherService {
       case 'cast.cancel': {
         const cast = save.active;
         requireState(cast && cast.id === id(action.castId), '这一竿已经结束');
-        requireState(cast.owner === clientId && cast.ownerEpoch === integer(action.ownerEpoch, 1), '请先在这里继续这一竿');
+        requireState((cast.automatic||cast.owner === clientId) && cast.ownerEpoch === integer(action.ownerEpoch, 1), '请先在这里继续这一竿');
         requireState(cast.simulation.phase!=='recovery','请先恢复这一竿的收获');
         if (cast.meta.source==='target') save.journey.baits.B07=Math.min(9999,(save.journey.baits.B07??0)+1);
         if (cast.meta.source==='invitation'&&!save.journey.invitations.includes(cast.catch.speciesId)) save.journey.invitations.push(cast.catch.speciesId);
+        if(cast.automatic)save.autoFishing.enabled=false;
         save.active = null; save.lastOutcome = 'cancelled';
         break;
       }
@@ -351,6 +350,22 @@ export class FisherService {
         requireState(typeof action.enabled === 'boolean', '请选择工作补给状态');
         save.work.enabled = action.enabled; break;
       }
+      case 'auto.enable': {
+        requireState(typeof action.enabled==='boolean','请选择自动钓鱼状态');
+        save.autoFishing.enabled=action.enabled;save.autoFishing.reason=null;break;
+      }
+      case 'auto.takeover': {
+        const cast=save.active;
+        requireState(cast&&cast.id===id(action.castId)&&cast.automatic,'这一竿已经结束或被接管');
+        const progress=Math.floor(cast.automatic.elapsedMs/cast.automatic.requiredMs*1_000_000);
+        cast.simulation={...initialSimulation(),phase:'fighting',tick:12+cast.challenge.waitTicks,progress:Math.min(900_000,progress),tension:150_000};
+        cast.automatic=null;cast.owner=clientId;cast.ownerEpoch++;cast.castRevision++;cast.inputCursor=0;
+        cast.paused=false;cast.leaseUntil=Date.now()+15000;
+        save.autoFishing.enabled=false;save.autoFishing.reason=null;break;
+      }
+      case 'auto.ack': {
+        save.autoFishing.seen=Math.max(save.autoFishing.seen,integer(action.through,0,save.autoFishing.caught));break;
+      }
       case 'work.claim': {
         const index = save.work.packs.indexOf(id(action.packId));
         requireState(index >= 0, '这份补给已经领取');
@@ -361,6 +376,45 @@ export class FisherService {
         award(save, 20, 1); break;
       }
       default: throw new ActionError('未知操作', 400);
+    }
+  }
+  private beginCast(save:Save,clientId:string,mode:Mode,automatic=false):PrivateCast {
+    const castId=randomUUID(),seed=randomBytes(4).readUInt32LE(),journey=save.journey;
+    requireState(regionUnlocked(journey.region,save.experience,save.research),'这个钓点还未解锁');
+    requireState(journey.bait==='B01'||journey.bait==='B08'||(journey.baits[journey.bait]??0)>0,'鱼饵用完了，请补充或换普通面团');
+    let selected:ReturnType<typeof rollEncounter>;
+    try{selected=rollEncounter(seed,castId,mode,journey,Object.keys(save.catalog) as SpeciesId[]);}
+    catch(error){throw new ActionError(error instanceof Error?error.message:'没有匹配的候选');}
+    if(journey.bait==='B08')journey.invitations=journey.invitations.filter(item=>item!==selected.catch.speciesId);
+    else if(journey.bait!=='B01')journey.baits[journey.bait]!--;
+    consumeOverride(journey);
+    const cast:PrivateCast={id:castId,seed,catch:selected.catch,challenge:selected.challenge,meta:selected.meta,
+      owner:clientId,ownerEpoch:1,leaseUntil:automatic?0:Date.now()+15000,castRevision:0,inputCursor:0,paused:automatic,
+      simulation:automatic?{...initialSimulation(),phase:'waiting'}:initialSimulation(),
+      automatic:automatic?{elapsedMs:0,requiredMs:autoFishingDuration(selected.catch)}:null};
+    save.active=cast;save.lastOutcome=null;return cast;
+  }
+  private advanceAutomatic(save:Save,ms:number):void {
+    if(!save.autoFishing.enabled||save.active&&!save.active.automatic)return;
+    if(save.pending){save.autoFishing.reason='请先处理待领取的收获';return;}
+    while(ms>0){
+      if(!save.active){
+        if(save.inventory.length>=240){save.autoFishing.reason='背包已满，整理后自动继续';return;}
+        try{this.beginCast(save,'automatic','assisted',true);}
+        catch(error){if(!(error instanceof ActionError))throw error;save.autoFishing.reason=error.message;return;}
+      }
+      const cast=save.active!,auto=cast.automatic!;save.autoFishing.reason=null;
+      const accepted=Math.min(ms,auto.requiredMs-auto.elapsedMs);auto.elapsedMs+=accepted;ms-=accepted;
+      if(auto.elapsedMs<auto.requiredMs)return;
+      this.completeCatch(save,cast);
+      const item=save.pending!;
+      if(isInventorySpecies(item.speciesId)){
+        if(save.inventory.length>=240){save.autoFishing.reason='背包已满，请处理这份收获';return;}
+        save.inventory.push(item);
+      }
+      save.autoFishing.caught=Math.min(2147483647,save.autoFishing.caught+1);
+      save.autoFishing.recent.push(structuredClone(item));save.autoFishing.recent=save.autoFishing.recent.slice(-12);
+      save.pending=null;
     }
   }
   private resolveCatch(save: Save, item: Catch, choice: 'sell' | 'release'): void {
@@ -375,6 +429,7 @@ export class FisherService {
   private applyInput(save: Save, request: InputRequest): void {
     const cast = save.active;
     requireState(cast && cast.id === id(request.castId), '这一竿已经结束');
+    requireState(!cast.automatic,'请先接管自动钓鱼');
     requireState(cast.owner === request.clientId && cast.ownerEpoch === integer(request.ownerEpoch, 1), '这一竿已在另一个窗口继续');
     requireState(!cast.paused, '请先继续这一竿');
     requireState(Date.now() <= cast.leaseUntil, '操作连接已暂停，请重新继续这一竿');

@@ -18,12 +18,14 @@ import { createCatalogView } from './catalog-view.tsx';
 import { createDialog } from './dialog.tsx';
 import { CoastSound } from './sound.ts';
 import { createInventoryView } from './inventory-view.tsx';
+import { createAutoFishingView } from './auto-fishing-view.tsx';
 
 export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentType<GameProps> {
   const Scene = createScene(React);
   const Harbor = createHarbor(React);
   const CardButton = createCardButton(React);
   const Dialog = createDialog(React);
+  const Automatic=createAutoFishingView(React);
   const releaseLabel=(item:Catch)=>species(item.speciesId).creature?'放流':'回收';
   const measurements=(item:Catch)=>item.lengthMm===null?'海岸纪念':`${(item.lengthMm/10).toFixed(1)} cm · ${item.weightG} g`;
   function FishArt({ id, variant='original', large = false }: { id: SpeciesId; variant?:Variant|null; large?: boolean }) {
@@ -58,6 +60,7 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
     const [toggle, setToggle] = React.useState(false);
     const [confirm, setConfirm] = React.useState<{ item: Catch; source: 'catch' | 'inventory'; choice: 'sell' | 'release' } | null>(null);
     const [cancelConfirm, setCancelConfirm] = React.useState(false);
+    const [autoHistory,setAutoHistory]=React.useState(false);
     const root = React.useRef<HTMLDivElement>(null);
     React.useEffect(() => {
       const outside = (event: Event) => {
@@ -78,6 +81,8 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
     const sim = view.sim;
     const phase = sim?.phase;
     const pending = data?.pending;
+    const automatic=cast?.automatic;
+    React.useEffect(()=>setAutoHistory(false),[data?.saveId]);
     React.useEffect(()=>{
       if(!data)return;
       const prior=lastSound.current,next={cast:cast?.id??'',pending:pending?.id??'',phase:phase??'',outcome:data.lastOutcome??'',coins:data.coins,error:view.error??''};
@@ -100,10 +105,10 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
     };
     const reelUp = () => { if (!toggle) controller.setReel(false); };
     const changeTab = (next: typeof tab) => { controller.pause();if(next!==tab)audio.play('page'); setTab(next); setConfirm(null); setCancelConfirm(false); root.current?.closest('.dsh-fisher-body')?.scrollTo({top:0}); };
-    const mood = pending ? '今天的海，回了一封信' : view.paused && cast ? '这一竿，等你回来' : phase === 'bite' ? '浮漂动了 · 现在提竿'
+    const mood = pending ? '今天的海，回了一封信' : automatic ? data?.autoFishing.enabled&&data.autoFishing.working?'你忙你的，海岸慢慢钓':'这份等待，下次接着来' : view.paused && cast ? '这一竿，等你回来' : phase === 'bite' ? '浮漂动了 · 现在提竿'
       : phase === 'fighting' ? warning(sim!, cast!.challenge) : phase === 'casting' ? '轻轻把线送出去' : phase === 'waiting' ? '等一阵涟漪' : '留一点时间给风，也给自己。';
     const visitor=data?.life.visitor?guest(data.life.visitor):null;
-    const visitorLine=visitor?(pending?visitor.lines[pending.isRecord?8:pending.isNew?6:7]:view.paused&&cast?visitor.lines[9]:visitor.lines[data!.life.guests[visitor.id].stage===3?10:2]):null;
+    const visitorLine=visitor?(pending?visitor.lines[pending.isRecord?8:pending.isNew?6:7]:(automatic?!data?.autoFishing.working:view.paused&&cast)?visitor.lines[9]:visitor.lines[data!.life.guests[visitor.id].stage===3?10:2]):null;
     return <div className="dsh-fisher-game" ref={root} onPointerDown={()=>audio.activate()} onChangeCapture={event=>{const target=event.target;if(target instanceof HTMLSelectElement||target instanceof HTMLInputElement&&['checkbox','radio'].includes(target.type))audio.play('select');}} onKeyDown={event=>{audio.activate();if(event.key==='Escape'){event.stopPropagation();controller.pause();}}}>
       <div className="dsh-fisher-location"><div><small>海岸手记 · Lv.{levelInfo(data?.experience??0).level}</small><h2>{location.name}</h2></div>
         <div className="dsh-fisher-wallet"><span title="壳币">壳币 <b>{data?.coins ?? '—'}</b></span><small>潮汐碎片 {data?.tokens ?? '—'} · 研究 {data?.research ?? '—'}</small></div></div>
@@ -117,14 +122,15 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
       {!view.connected&&<p className="dsh-fisher-empty">海岸正在等待连接，进度已暂停。</p>}
       {view.connected&&tab === 'fishing' && <>
         <div className={`dsh-fisher-scene dsh-fisher-play-scene${phase === 'fighting' && !view.paused ? ' is-fighting' : ''}`}>
-          <Scene lowPerformance={lowPerformance} reducedMotion={reducedMotion} data={data} pose={pending?'surprise':phase==='casting'?'cast':phase==='fighting'&&view.reel?'reel':cast?'hold':'idle'} paused={!!cast && view.paused || !view.connected || !!confirm || cancelConfirm || !!pending || !!view.reward} />
+          <Scene lowPerformance={lowPerformance} reducedMotion={reducedMotion} data={data} pose={pending?'surprise':phase==='casting'?'cast':phase==='fighting'&&view.reel?'reel':cast?'hold':'idle'} paused={(automatic?!data?.autoFishing.working:!!cast&&view.paused) || !view.connected || !!confirm || cancelConfirm || !!pending || !!view.reward} />
           <div className="dsh-fisher-scene-label"><span>{cast?.setup?TIDE_NAMES[cast.setup.tide]:data?TIDE_NAMES[currentTide(data.journey)]:'平潮'} · 风轻</span><b>{location.id.slice(1)} / SHORE</b></div>
-          {cast && !pending && <div className="dsh-fisher-float" data-phase={view.paused ? 'paused' : phase} data-glow={data!.journey.loadout.float==='U03'&&['L03','L04'].includes(location.id)} aria-hidden="true">{GEAR_ART[data!.journey.loadout.float]?<img src={`${API}/assets/${thumbnailAsset(GEAR_ART[data!.journey.loadout.float]!)}`} alt=""/>:<i/>}<b /></div>}
+          {cast && !pending && <div className="dsh-fisher-float" data-phase={(automatic?!data?.autoFishing.working:view.paused) ? 'paused' : phase} data-glow={data!.journey.loadout.float==='U03'&&['L03','L04'].includes(location.id)} aria-hidden="true">{GEAR_ART[data!.journey.loadout.float]?(<img src={`${API}/assets/${thumbnailAsset(GEAR_ART[data!.journey.loadout.float]!)}`} alt=""/>):<i/>}<b /></div>}
           {pending?.isRecord&&data!.journey.loadout.float==='U04'&&<span className="dsh-fisher-record-flag">新纪录</span>}
           <div className="dsh-fisher-note" role="status">{mood}</div>
         </div>
         <section className="dsh-fisher-play-card" aria-label="钓鱼操作">
-          {pending ? <p>新相遇，慢慢看。</p> : cast ? <>
+          {data&&<Automatic.Controls data={data} controller={controller} disabled={blocked} onHistory={()=>setAutoHistory(true)}/>}
+          {pending ? <p>新相遇，慢慢看。</p> : data&&(automatic||!cast&&data.autoFishing.enabled)?<Automatic.Progress data={data} controller={controller} disabled={blocked} onCancel={()=>setCancelConfirm(true)} onHarbor={()=>changeTab('harbor')}/> : cast ? <>
             <div className="dsh-fisher-play-heading"><h3>{view.paused ? '这一竿已暂停' : phase === 'fighting' ? '跟着它的节奏' : phase === 'bite' ? '有鱼咬钩！' : '等鱼来信'}</h3>
               <small>{cast.challenge.mode==='guided'?'引导收获':cast.challenge.mode === 'assisted' ? '辅助松线' : '标准模式'}</small></div>
             {phase === 'fighting' && <><Meter label="收线进度" value={sim!.progress} /><Meter label="鱼线张力" value={sim!.tension} danger />
@@ -164,6 +170,7 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
         {view.error&&<div role="alert"><p>{view.error}</p><button disabled={view.busy} onClick={()=>void controller.retry()}>重试保存</button></div>}
       </Dialog>}
       {view.connected&&view.reward&&!pending&&<Dialog key={view.reward.id} title={view.reward.title} className="dsh-fisher-reward-dialog" onClose={controller.dismissReward} closeLabel="继续" hint="点击空白处继续。"><div className="dsh-fisher-reward-items">{view.reward.items.map((item,index)=><div className="dsh-fisher-reward-item" key={index}>{item.art?<img src={`${API}/assets/${item.art}`} alt=""/>:<span className="dsh-fisher-reward-mark" aria-hidden="true">✦</span>}<strong>{item.name}</strong><small>×{item.quantity}</small></div>)}</div></Dialog>}
+      {view.connected&&data&&!pending&&!view.reward&&!confirm&&!cancelConfirm&&<Automatic.Catches data={data} controller={controller} disabled={blocked} open={autoHistory||data.autoFishing.caught>data.autoFishing.seen} onClose={()=>setAutoHistory(false)}/>}
       {confirm && <Dialog title="确认处理这份纪念" onClose={()=>setConfirm(null)} busy={view.busy}><p>这是{confirm.item.isNew ? '首次发现' :confirm.item.isNewVariant?'首次外观': '刷新纪录'}的{species(confirm.item.speciesId).name}。{confirm.choice === 'sell' ? '出售' : releaseLabel(confirm.item)}后图鉴仍会保留。</p>
         <div className="dsh-fisher-actions"><button disabled={blocked} onClick={() => {
           void controller.action(confirm.source === 'catch' ? { type: 'catch.resolve', catchId: confirm.item.id, choice: confirm.choice,confirmed:true }
