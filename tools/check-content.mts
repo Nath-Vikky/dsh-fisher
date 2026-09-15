@@ -5,7 +5,7 @@ import { gzipSync } from 'node:zlib';
 import { verifyContent } from '../src/game/content-check.ts';
 import { SPECIES,SPRITES,VARIANTS } from '../src/game/content.ts';
 import { GEAR_ART } from '../src/game/gear.ts';
-import { BAIT_ART,DECOR_ART,GUEST_ART,PLAYER_ART,SCENE_ART,visualIllustrations } from '../src/game/visuals.ts';
+import { BAIT_ART,DECOR_ART,GUEST_ART,PLAYER_ART,WORLD_PLAYER_ART,SCENE_ART,visualIllustrations } from '../src/game/visuals.ts';
 import { thumbnailAsset } from '../src/game/art.ts';
 
 const root=resolve(import.meta.dirname,'..'),directory=resolve(root,'assets/runtime');
@@ -33,7 +33,7 @@ const entryGzip=gzipSync(await readFile(resolve(root,'lib/client.js'))).length;
 const gameGzip=gzipSync(await readFile(resolve(root,'lib/game.js'))).length;
 const worldGzip=gzipSync(await readFile(resolve(root,'lib/world.js'))).length;
 assert.ok(worldGzip<=350*1024,'The optional 3D scene must stay within its own loading budget');
-const coldFiles=[SCENE_ART.L01,...PLAYER_ART.idle];
+const coldFiles=[SCENE_ART.L01,...Object.values(WORLD_PLAYER_ART)];
 const coldBytes=(await Promise.all(coldFiles.map(file=>readFile(resolve(directory,file))))).reduce((sum,bytes)=>sum+bytes.length,0);
 assert.ok(entryGzip<=50*1024);assert.ok(gameGzip<=250*1024);assert.ok(coldBytes<=2*1024*1024);assert.ok(total<=24*1024*1024);
-console.log(JSON.stringify({species:SPECIES.length,creatureLooks:SPECIES.filter(entry=>entry.creature).length*VARIANTS.length,guests:4,outfits:8,playerFrames:10,gear:14,baits:8,decor:24,scenes:4,runtimeFiles:files.size,runtimeBytes:total,entryGzip,gameGzip,worldGzip,coldSceneBytes:coldBytes},null,2));
+console.log(JSON.stringify({species:SPECIES.length,creatureLooks:SPECIES.filter(entry=>entry.creature).length*VARIANTS.length,guests:4,outfits:8,playerFrames:new Set(Object.values(WORLD_PLAYER_ART)).size,gear:14,baits:8,decor:24,scenes:4,runtimeFiles:files.size,runtimeBytes:total,entryGzip,gameGzip,worldGzip,coldSceneBytes:coldBytes},null,2));

@@ -2,7 +2,7 @@
 
 面向 DeepSeek Harness（DSH）Web 的休闲钓鱼与收藏插件。工作之余，在岸边慢慢钓一竿。
 
-当前分支版本为 `0.2.0-preview.2`，提供全景界面、3D 摸鱼塘和精细 2D 人物，可从源码构建并本地安装，尚未发布到 npm。原像素版 `0.1.0-rc.11` 保留在 [archive/pixel-v1-rc11](https://github.com/Nath-Vikky/dsh-fisher/tree/archive/pixel-v1-rc11)。
+当前分支版本为 `0.2.0-preview.3`，提供全景界面、3D 摸鱼塘和精细 2D 人物，可从源码构建并本地安装，尚未发布到 npm。原像素版 `0.1.0-rc.11` 保留在 [archive/pixel-v1-rc11](https://github.com/Nath-Vikky/dsh-fisher/tree/archive/pixel-v1-rc11)。
 
 ![原像素版钓鱼界面](assets/readme/fishing.png)
 
@@ -10,6 +10,7 @@
 
 - 摸鱼塘采用竖屏固定斜俯视 3D 海岸：拖动摇杆或使用方向键／WASD 移动，靠近木栈桥、浅湾与来客后展开交互。导航按钮也可自动走到目的地。
 - 瓦顶小屋、庭院、植被、池塘与动态水面，配合柔和阴影；人物使用带体积明暗的 2D 图像，并参与场景遮挡。场景铺满游戏窗口，主功能由边缘按钮打开，设置和详情都显示在游戏范围内。
+- 主角为戴渔夫帽的蓝发鲸鱼少女，支持短步行走、眨眼、抛竿、持竿、收线和收获反应；各地区使用同一套人物。动作贴图提前加载，关闭窗口或暂停时停止播放，“减少动态”保留静态姿势。
 - 四个钓点及各自场景、49 个图鉴条目：28 种鱼、13 种奇珍异兽、4 件遗物和 4 位来客。37 种生物具有原色、珠光、星砂外观及尺寸纪录。
 - 抛竿、等待咬钩、提竿和张力控制，支持辅助松线、按住收线或点击切换收线。
 - 可选择自动钓鱼，随 DSH 活动积累进度、自动收获；稀有产物需要更久，途中可以接管为手动钓鱼。
@@ -75,7 +76,7 @@ npm pack --ignore-scripts
 
 ```powershell
 $env:DSH_HOME = Join-Path $PWD 'tmp/dsh-fisher-preview'
-$fisherPackage = Join-Path $PWD 'nath-vikky-dsh-fisher-0.2.0-preview.2.tgz'
+$fisherPackage = Join-Path $PWD 'nath-vikky-dsh-fisher-0.2.0-preview.3.tgz'
 pnpm dlx @deepseek-ai/dsh@0.1.2-rc.1 plugin --profile web add --ignore-scripts $fisherPackage
 pnpm dlx @deepseek-ai/dsh@0.1.2-rc.1 web
 ```

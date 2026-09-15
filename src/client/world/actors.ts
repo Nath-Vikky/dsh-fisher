@@ -2,10 +2,11 @@ import {CircleGeometry,CylinderGeometry,Group,LinearFilter,LinearMipmapLinearFil
 import type {Camera} from 'three';
 import {API} from '../../protocol.ts';
 import {WORLD_PLAYER_ART,guestPicture} from '../../game/visuals.ts';
-import type {PlayerPose,Outfit} from '../../game/visuals.ts';
+import type {Outfit} from '../../game/visuals.ts';
 import type {GuestId} from '../../game/guests.ts';
+import {PLAYER_DRAWN_HEIGHT,PLAYER_FOOT,PLAYER_HANDS,playerMotion} from '../player-motion.ts';
+import type {ActorPose} from '../player-motion.ts';
 
-export type ActorPose=PlayerPose|'walk';
 export class ActorTextures {
   textures=new Map<string,Texture>();
   private pending=new Map<string,Promise<Texture>>();private cancel=new Set<()=>void>();private disposed=false;
@@ -37,7 +38,7 @@ export class SpriteActor {
   group=new Group();private material=new SpriteMaterial({alphaTest:.12,transparent:true,depthWrite:true,toneMapped:false});
   private sprite=new Sprite(this.material);private rodMaterial=new MeshStandardMaterial({color:'#795238',roughness:.65});private rod=new Group();
   private right=true;private picture='';private tip=new Vector3();private screenRight=new Vector3();private screenUp=new Vector3();private screenForward=new Vector3();private rodDirection=new Vector3();private up=new Vector3(0,1,0);
-  private height:number;private bob=0;private guestFile='';
+  private height:number;private guestFile='';private pose:ActorPose='idle';private poseStarted=0;
   constructor(private pictures:ActorTextures,private visitor=false){
     this.height=visitor?2.18:2;this.sprite.center.set(.5,.02);this.sprite.scale.set(this.height,this.height,1);this.sprite.renderOrder=2;
     const shaft=new Mesh(new CylinderGeometry(.011,.025,2.1,7),this.rodMaterial);shaft.position.y=1.05;
@@ -49,34 +50,40 @@ export class SpriteActor {
     shadow.rotation.x=-Math.PI/2;shadow.scale.set(1,.62,1);shadow.position.y=.014;this.group.add(shadow);
   }
   async prepare(guest?:GuestId|null,outfit:Outfit='base',rod='D01'):Promise<void>{
-    const files:string[]=this.visitor?(guest?[guestPicture(guest,outfit,'chibi')!]:[]):Object.values(WORLD_PLAYER_ART).filter((file):file is string=>!!file);
+    const files:string[]=this.visitor?(guest?[guestPicture(guest,outfit,'chibi')!]:[]):Object.values(WORLD_PLAYER_ART);
     if(this.visitor)this.guestFile=files[0]??'';
     else{const colors:Record<string,string>={D01:'#795238',D02:'#54785c',D03:'#617e9b',D04:'#424e69',D05:'#60a9a4',D06:'#b79662'};this.rodMaterial.color.set(colors[rod]??colors.D01!);}
     await Promise.all(files.map(file=>this.pictures.load(file)));
     this.material.map=this.pictures.textures.get(this.visitor?this.guestFile:WORLD_PLAYER_ART.idle)??null;this.material.needsUpdate=true;
-    this.sprite.center.y=this.visitor&&guest==='G003'&&outfit==='base'?.076:.02;
+    this.sprite.center.y=this.visitor?(guest==='G003'&&outfit==='base'?.076:.02):1-PLAYER_FOOT;
   }
   face(right:boolean):void{this.right=right;}
-  animate(pose:ActorPose,time:number,still:boolean,camera:Camera):void{
-    const step=pose==='walk'&&!still&&Math.floor(time*4)%2===1;
-    const file=this.visitor?this.guestFile:['cast','hold','reel'].includes(pose)?WORLD_PLAYER_ART.hold??WORLD_PLAYER_ART.idle:step?WORLD_PLAYER_ART.walk??WORLD_PLAYER_ART.idle:WORLD_PLAYER_ART.idle;
+  animate(pose:ActorPose,time:number,reduced:boolean,camera:Camera):void{
+    if(pose!==this.pose){this.pose=pose;this.poseStarted=time;}
+    const motion=playerMotion(pose,time-this.poseStarted,reduced);
+    const file=this.visitor?this.guestFile:motion.file;
     const texture=this.pictures.textures.get(file);
     if(texture){
       if(this.picture!==file){this.material.map=texture;this.material.needsUpdate=true;this.picture=file;}
-      const source=texture.image as ImageBitmap;this.sprite.scale.x=this.height*source.width/source.height;
+      const source=texture.image as ImageBitmap;
+      const height=this.visitor?this.height:this.height/PLAYER_DRAWN_HEIGHT;
+      this.sprite.scale.set(height*source.width/source.height,height*(this.visitor?1:motion.stretch),1);
       texture.repeat.x=this.right?1:-1;texture.offset.x=this.right?0:1;
     }
-    this.sprite.visible=!!texture;this.bob=pose==='walk'&&!still?Math.abs(Math.sin(time*9))*.045:0;this.sprite.position.y=this.bob;
-    this.material.rotation=pose==='walk'&&!still?Math.sin(time*9)*.012:0;
+    this.sprite.visible=!!texture;this.sprite.position.y=this.visitor?0:motion.bob;
+    this.material.rotation=this.visitor?0:motion.rotation;
     const fishing=!this.visitor&&['cast','hold','reel'].includes(pose);this.rod.visible=fishing;
     if(!fishing)return;
-    const hand=WORLD_PLAYER_ART.hold?[this.right?.775:.225,.49]:[this.right?.735:.265,.604];
+    const hand=PLAYER_HANDS[file]??PLAYER_HANDS[WORLD_PLAYER_ART.hold]!;
+    const handX=((this.right?hand[0]:1-hand[0])-.5)*this.sprite.scale.x,handY=(PLAYER_FOOT-hand[1])*this.sprite.scale.y;
+    const turn=this.material.rotation,gripX=handX*Math.cos(turn)-handY*Math.sin(turn),gripY=handX*Math.sin(turn)+handY*Math.cos(turn);
     this.screenRight.setFromMatrixColumn(camera.matrixWorld,0);this.screenUp.setFromMatrixColumn(camera.matrixWorld,1);camera.getWorldDirection(this.screenForward);
-    this.rod.position.copy(this.screenRight).multiplyScalar((hand[0]!-.5)*this.sprite.scale.x).addScaledVector(this.screenUp,(1-hand[1]!-.02)*this.height).addScaledVector(this.screenForward,.018);
-    const bend=still?0:pose==='cast'?Math.sin(time*3)*.3:pose==='reel'?Math.sin(time*5)*.05:0;
-    this.rodDirection.set(0,1.2+bend,1.8).normalize();this.rod.quaternion.setFromUnitVectors(this.up,this.rodDirection);
+    this.rod.position.copy(this.screenRight).multiplyScalar(gripX).addScaledVector(this.screenUp,gripY).addScaledVector(this.screenForward,.018);this.rod.position.y+=motion.bob;
+    this.rodDirection.set(0,1.2+motion.rodLift,1.8).normalize();this.rod.quaternion.setFromUnitVectors(this.up,this.rodDirection);
     this.tip.copy(this.group.position).add(this.rod.position).addScaledVector(this.rodDirection,2.1);
   }
   rodTip():Vector3{return this.tip;}
+  get frame():string{return this.picture;}
+  get action():ActorPose{return this.pose;}
   dispose():void{this.material.dispose();}
 }

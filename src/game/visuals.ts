@@ -39,14 +39,19 @@ export const BAIT_ART: Record<BaitId,string> = {
   B05:'b05-oddbait-pixel-v1.webp',B06:'b06-deepbait-pixel-v1.webp',
   B07:'b07-targetbait-pixel-v1.webp',B08:'b08-invitebait-pixel-v1.webp',
 };
+export const WORLD_PLAYER_ART={
+  idle:'p001-whale-idle-v1.webp',blink:'p001-whale-blink-v1.webp',
+  walkA:'p001-whale-walk-a-v1.webp',walkB:'p001-whale-walk-b-v1.webp',
+  cast:'p001-whale-cast-v1.webp',hold:'p001-whale-hold-v1.webp',
+  reel:'p001-whale-reel-v1.webp',surprise:'p001-whale-surprise-v1.webp',
+} as const;
 export const PLAYER_ART: Record<PlayerPose,readonly [string,string]> = {
-  idle:['p001-player-idle1-pixel-v2.webp','p001-player-idle2-pixel-v2.webp'],
-  cast:['p001-player-cast1-pixel-v2.webp','p001-player-cast2-pixel-v2.webp'],
-  hold:['p001-player-hold1-pixel-v2.webp','p001-player-hold2-pixel-v3.webp'],
-  reel:['p001-player-reel1-pixel-v2.webp','p001-player-reel2-pixel-v2.webp'],
-  surprise:['p001-player-surprise1-pixel-v2.webp','p001-player-surprise2-pixel-v2.webp'],
+  idle:[WORLD_PLAYER_ART.idle,WORLD_PLAYER_ART.blink],
+  cast:[WORLD_PLAYER_ART.cast,WORLD_PLAYER_ART.hold],
+  hold:[WORLD_PLAYER_ART.hold,WORLD_PLAYER_ART.hold],
+  reel:[WORLD_PLAYER_ART.reel,WORLD_PLAYER_ART.hold],
+  surprise:[WORLD_PLAYER_ART.surprise,WORLD_PLAYER_ART.idle],
 };
-export const WORLD_PLAYER_ART:{idle:string;walk?:string;hold?:string}={idle:'p001-player-idle-hd2d-v1.webp'};
 export function guestPicture(id:GuestId,outfit:Outfit,kind:'portrait'|'chibi'):string|undefined {
   return GUEST_ART[id]?.[outfit][kind];
 }

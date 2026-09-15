@@ -1,18 +1,13 @@
 import type * as ReactTypes from 'react';
 import type { Bootstrap } from '../protocol.ts';
 import { region } from '../game/content.ts';
-import { SCENE_ART, DECOR_ART, PLAYER_ART, guestPicture } from '../game/visuals.ts';
+import { SCENE_ART, DECOR_ART, WORLD_PLAYER_ART, guestPicture } from '../game/visuals.ts';
 import type { PlayerPose } from '../game/visuals.ts';
 import { GEAR_ART } from '../game/gear.ts';
 import { drawCoast, coastPoint } from './coast.ts';
 import { SceneArt, drawSprite } from './scene-art.ts';
-
-// Hand positions within each full sprite, shared by all equipped rods.
-const ROD_HANDS={
-  cast:[[.645,.35],[.745,.29]],
-  hold:[[.655,.495],[.655,.495]],
-  reel:[[.64,.395],[.625,.375]],
-} as const;
+import {PLAYER_DRAWN_HEIGHT,PLAYER_FOOT,PLAYER_HANDS,playerMotion} from './player-motion.ts';
+const playerFiles=Object.values(WORLD_PLAYER_ART);
 
 interface Props { lowPerformance:boolean; paused?:boolean; reducedMotion?:boolean; data:Bootstrap|null; pose?:PlayerPose; quiet?:boolean }
 export function createScene(React:typeof ReactTypes) {
@@ -27,13 +22,13 @@ export function createScene(React:typeof ReactTypes) {
     const visitor=guest?guestPicture(guest,data!.life.guests[guest].outfit,'chibi'):undefined;
     const decorFiles=(['ground','seat','lamp','sign'] as const).map(slot=>data?.life.decor[slot]).flatMap(id=>id&&DECOR_ART[id]?[DECOR_ART[id]]:[]);
     const rod=data&&['cast','hold','reel'].includes(pose)?GEAR_ART[data.journey.loadout.rod]:undefined;
-    const files=[scene,visitor,rod,...decorFiles,...(PLAYER_ART[pose]??[])].filter((file):file is string=>!!file);
+    const files=[scene,visitor,rod,...decorFiles,...playerFiles].filter((file):file is string=>!!file);
     const fileKey=files.join('|');
     const fileRef=React.useRef(files);fileRef.current=files;
     React.useEffect(()=>{art.current?.select(fileRef.current);restart.current();},[fileKey,paused,reducedMotion,data?.revision]);
     React.useEffect(()=>{
       const element=canvas.current,ctx=element?.getContext('2d',{alpha:false});if(!element||!ctx)return;
-      let frame=0,width=0,height=0,pixelRatio=0,last=0,elapsed=0,stopped=false,visible=true;
+      let frame=0,width=0,height=0,pixelRatio=0,last=0,elapsed=0,stopped=false,visible=true,poseStarted=0,previousPose:PlayerPose='idle',celebrateUntil=0;
       const reduced=matchMedia('(prefers-reduced-motion: reduce)');
       const draw=()=>{
         const current=latest.current,snapshot=current.data;
@@ -45,17 +40,23 @@ export function createScene(React:typeof ReactTypes) {
           const id=snapshot?.life.decor[slot],position=point(x,y);
           if(id)drawSprite(ctx,artwork.get(DECOR_ART[id]),position.x,position.y,size,size);
         }
-        const playerFrames=PLAYER_ART[current.pose]??[],player=point(.47,.62);
-        const actorScale=Math.min(1.6,width/320,Math.max(.65,(player.y-8)/80));
-        const staticFrame=current.reducedMotion||reduced.matches||current.paused;
-        const frameIndex=(staticFrame?0:Math.floor(elapsed*2))%Math.max(1,playerFrames.length);
-        const frameName=playerFrames[frameIndex];
+        const player=point(.47,.62);
+        const actorScale=Math.min(1.6,width/320,Math.max(.65,(player.y-8)/96));
+        if(current.pose==='surprise'&&previousPose!=='surprise')celebrateUntil=elapsed+1.1;
+        const pose=current.pose==='idle'&&!current.reducedMotion&&!reduced.matches&&elapsed<celebrateUntil?'surprise':current.pose;
+        if(previousPose!==pose){previousPose=pose;poseStarted=elapsed;}
+        const motion=playerMotion(pose,elapsed-poseStarted,current.reducedMotion||reduced.matches);
+        const playerSize=96*actorScale/PLAYER_DRAWN_HEIGHT;
+        const playerY=player.y-motion.bob*48*actorScale;
+        const frameName=motion.file;
+        element.dataset.playerFrame=frameName;element.dataset.playerAction=pose;
         if(snapshot&&(current.pose==='cast'||current.pose==='hold'||current.pose==='reel')) {
           const equipped=artwork.get(GEAR_ART[snapshot.journey.loadout.rod]);
           if(equipped) {
-            const hand=ROD_HANDS[current.pose][frameIndex]??ROD_HANDS[current.pose][0],playerSize=Math.round(80*actorScale);
-            const gripX=Math.round(player.x)+(hand[0]-.5)*playerSize,gripY=Math.round(player.y)+(hand[1]-1)*playerSize;
-            const gesture=current.pose==='cast'?(frameIndex===0?-.3:0):current.pose==='reel'&&!staticFrame?Math.sin(elapsed*4)*.04:0;
+            const hand=PLAYER_HANDS[frameName]??PLAYER_HANDS[WORLD_PLAYER_ART.hold]!;
+            const handX=(hand[0]-.5)*playerSize,handY=(hand[1]-PLAYER_FOOT)*playerSize*motion.stretch;
+            const angle=-motion.rotation,gripX=player.x+handX*Math.cos(angle)-handY*Math.sin(angle),gripY=playerY+handX*Math.sin(angle)+handY*Math.cos(angle);
+            const gesture=-motion.rodLift*.35;
             // Keep the entire rotated rod in the scene without moving its grip away from the hand.
             const bounds=([[-.35,-.66],[.65,-.66],[-.35,.34],[.65,.34]] as const).map(([x,y])=>({
               x:x*Math.cos(gesture)-y*Math.sin(gesture),y:x*Math.sin(gesture)+y*Math.cos(gesture),
@@ -68,7 +69,8 @@ export function createScene(React:typeof ReactTypes) {
           }
         }
         // The player's foreground hand and sleeve cover the handle, rather than the reverse.
-        drawSprite(ctx,artwork.get(frameName),player.x,player.y,80*actorScale,96*actorScale);
+        const picture=artwork.get(frameName);
+        if(picture){ctx.save();ctx.translate(player.x,playerY);ctx.rotate(-motion.rotation);ctx.scale(1,motion.stretch);ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.drawImage(picture,-playerSize/2,-PLAYER_FOOT*playerSize,playerSize,playerSize);ctx.restore();}
         const guestId=snapshot?.life.visitor,guestPosition=point(.28,.67);
         if(guestId)drawSprite(ctx,artwork.get(guestPicture(guestId,snapshot!.life.guests[guestId].outfit,'chibi')),guestPosition.x,guestPosition.y,76*actorScale,84*actorScale);
       };
@@ -82,7 +84,8 @@ export function createScene(React:typeof ReactTypes) {
       const start=()=>{
         cancelAnimationFrame(frame);if(stopped||!visible||document.hidden)return;
         last=performance.now();draw();
-        const ready=!!artwork.get(SCENE_ART[latest.current.data?.journey.region??'L01']);
+        element.dataset.sceneAssets=JSON.stringify(artwork.status());
+        const ready=!!artwork.get(SCENE_ART[latest.current.data?.journey.region??'L01'])&&playerFiles.every(file=>!!artwork.get(file));
         setArtState(artwork.hasError()?'error':ready?'ready':'loading');
         if(ready&&!reduced.matches&&!latest.current.reducedMotion&&!latest.current.paused)frame=requestAnimationFrame(render);
       };

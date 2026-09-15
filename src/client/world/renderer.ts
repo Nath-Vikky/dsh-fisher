@@ -19,7 +19,7 @@ export class CoastWorld {
   private resizeObserver:ResizeObserver;private intersection:IntersectionObserver;
   private systemMotion=matchMedia('(prefers-reduced-motion: reduce)');
   private target=new Vector3();private aim=new Vector3();private cameraOffset=new Vector3(10,17,15);
-  private key:string;private started=performance.now();private wasAutomatic=false;
+  private key:string;private started=performance.now();private wasAutomatic=false;private celebrateUntil=0;
   constructor(private canvas:HTMLCanvasElement,options:WorldProps,private changed:(state:WorldState)=>void,private failed:()=>void){
     this.options=options;this.key=`dsh-fisher:walk:v1:${options.data.saveId}`;
     try{const saved=JSON.parse(localStorage.getItem(this.key)??'null') as {position?:Point;spot?:string}|null;
@@ -80,6 +80,8 @@ export class CoastWorld {
   update(options:WorldProps):void {
     const before=this.options;this.options=options;
     if(this.disposed)return;
+    // Let the catch reaction play when the reward overlay releases the scene.
+    if(options.pose==='surprise'&&before.pose!=='surprise')this.celebrateUntil=this.time+1.1;
     this.visitor.group.visible=!!options.data.life.visitor;
     const visitor=options.data.life.visitor,key=`${visitor??''}|${visitor?options.data.life.guests[visitor].outfit:'base'}|${options.data.journey.loadout.rod}`;
     if(this.ready&&key!==this.actorKey)void this.prepareActors().catch(()=>{if(!this.disposed){this.dispose();this.failed();}});
@@ -135,10 +137,10 @@ export class CoastWorld {
     const atSpot=!this.path.length&&(!!active||auto);
     if(atSpot)this.player.face(false);
     this.player.group.position.set(this.position.x,.145,this.position.z);
-    const pose=walking?'walk':atSpot?(auto&&!this.options.data.autoFishing.working?'hold':active?this.options.pose:'hold'):this.options.pose==='surprise'?'surprise':'idle';
+    const pose=walking?'walk':atSpot?(auto&&!this.options.data.autoFishing.working?'hold':active?this.options.pose:'hold'):this.options.pose==='surprise'||!this.reduced&&this.time<this.celebrateUntil?'surprise':'idle';
     this.aim.set(this.position.x*(atSpot ? .9 : .64),-.1,this.position.z*(atSpot ? .9 : .63));
     this.target.lerp(this.aim,this.reduced||dt===0?1:1-Math.exp(-dt*4));this.camera.position.copy(this.target).add(this.cameraOffset);this.camera.lookAt(this.target);this.camera.updateMatrixWorld();
-    this.player.animate(pose,this.time,this.reduced||this.options.paused,this.camera);this.visitor.animate('idle',this.time,this.reduced,this.camera);this.scenery.update(this.reduced?0:this.time);
+    this.player.animate(pose,this.time,this.reduced,this.camera);this.visitor.animate('idle',this.time,this.reduced,this.camera);this.scenery.update(this.reduced?0:this.time);
     this.line.visible=this.bobber.visible=atSpot;
     if(atSpot){
       const place=PLACES[this.spot],tip=this.player.rodTip(),water=new Vector3(place.x,-.2,place.z+1.65);
@@ -155,6 +157,7 @@ export class CoastWorld {
     const value=JSON.stringify(state);if(value!==this.published){this.published=value;this.changed(state);}
     this.canvas.dataset.playerX=this.position.x.toFixed(2);this.canvas.dataset.playerZ=this.position.z.toFixed(2);this.canvas.dataset.spot=this.spot;
     this.canvas.dataset.actors='2d-cutouts';
+    this.canvas.dataset.playerFrame=this.player.frame;this.canvas.dataset.playerAction=this.player.action;
   }
   private persist():void {try{localStorage.setItem(this.key,JSON.stringify({position:this.position,spot:this.spot}));}catch{/* Optional view preferences never block fishing. */}}
   dispose():void {
