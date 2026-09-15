@@ -23,6 +23,34 @@ export const styles = `
 .dsh-fisher-launcher-bobber{animation:dsh-fisher-float-bob 2.8s ease-in-out infinite}
 .dsh-fisher-launcher-ripple{position:absolute;left:66%;top:76%;width:23%;height:6%;border:1px solid #d4f7ef;border-radius:50%;animation:dsh-fisher-water-ripple 2.8s ease-out infinite}
 .dsh-fisher-launcher[data-status=waiting] .dsh-fisher-launcher-picture *{animation:none}
+.dsh-fisher-game[data-world=true]{height:100%}
+.dsh-fisher-world-stage{position:relative;min-height:270px;flex:1 1 350px;overflow:hidden;border:1px solid var(--fisher-ink);background:#bedad4}
+.dsh-fisher-world-stage[data-fishing=true]{min-height:190px;flex-basis:230px}
+.dsh-fisher-world{position:absolute;inset:0;overflow:hidden}
+.dsh-fisher-world canvas{position:absolute;inset:0;display:block;width:100%;height:100%;touch-action:none;image-rendering:auto;outline-offset:-3px}
+.dsh-fisher-world-title{position:absolute;top:11px;left:11px;max-width:calc(100% - 22px);display:flex;flex-direction:column;gap:3px;pointer-events:none}
+.dsh-fisher-world-title span{align-self:flex-start;font-size:12px;padding:5px 9px;border:1px solid var(--fisher-ink);background:var(--fisher-raised);box-shadow:2px 2px 0 #40596230}
+.dsh-fisher-world-title small{align-self:flex-start;font-size:10px;padding:2px 6px;background:#f8efdcd9;color:#405b60}
+.dsh-fisher-world-waypoints{position:absolute;top:76px;left:11px;display:flex;gap:6px;flex-wrap:wrap;max-width:calc(100% - 22px)}
+.dsh-fisher-world-waypoints button{font-size:10px;padding:4px 7px;background:var(--fisher-raised);box-shadow:1px 1px 0 #40596245}
+.dsh-fisher-joystick-wrap{position:absolute;bottom:15px;left:15px;display:flex;flex-direction:column;align-items:center;gap:7px;user-select:none}
+.dsh-fisher .dsh-fisher-joystick{position:relative;display:grid;place-items:center;width:88px;height:88px;border:1px solid #41616b;border-radius:50%;padding:0;background:#f3eed6c9;touch-action:none;cursor:grab;box-shadow:inset 0 0 0 6px #f6f2e147,2px 3px 0 #43686c38;user-select:none}
+.dsh-fisher .dsh-fisher-joystick:active{cursor:grabbing;background:#e0eee2d9;box-shadow:inset 0 0 0 6px #f6f2e147}
+.dsh-fisher-joystick span{position:absolute;z-index:1;width:39px;height:39px;border-radius:50%;border:1px solid #3b6774;background:#84bdc5;box-shadow:inset 2px 2px 0 #c8ebe8,1px 2px 0 #406a7340;pointer-events:none}
+.dsh-fisher-joystick i{position:relative;z-index:2;color:#f8f5df;font-size:20px;font-style:normal;pointer-events:none}
+.dsh-fisher-joystick-wrap small{padding:2px 5px;font-size:10px;color:#3c5c61;background:#f6f1dfdb;border-bottom:1px solid #739899}
+.dsh-fisher-world-interaction{position:absolute;bottom:17px;right:12px;width:145px;max-width:calc(100% - 142px);display:flex;flex-direction:column;gap:7px;align-items:stretch}
+.dsh-fisher-world-interaction>small{align-self:flex-end;border-bottom:1px solid #58757a;padding:2px 7px;background:#f6f1dfe6;color:#405b60;font-size:11px}
+.dsh-fisher-world-interaction button{font-size:12px;padding:8px 9px}
+.dsh-fisher-world-interaction>span{align-self:flex-end;font-size:10px;text-align:right;line-height:1.8;color:#49646a;background:#f5eededb;padding:5px 8px}
+.dsh-fisher-world-toolbar{flex-shrink:0;border:1px solid var(--fisher-ink);padding:7px 10px;background:var(--fisher-raised)}
+.dsh-fisher-world-toolbar .dsh-fisher-auto-controls{margin:0;padding:0;border:0}
+.dsh-fisher-world-loading{position:absolute;inset:0;z-index:4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:24px;text-align:center;background:var(--fisher-paper);color:var(--fisher-ink)}
+.dsh-fisher-world-loading small{font-size:11px;color:var(--fisher-muted)}
+.dsh-fisher-world-loading p{font-size:12px;max-width:230px}
+.dsh-fisher-world-loading-mark{display:grid;place-items:center;width:56px;height:56px;background:var(--fisher-sea);border:1px solid var(--fisher-ink);font:42px/1 Georgia,serif;box-shadow:3px 3px 0 var(--fisher-paper),4px 4px 0 var(--fisher-ink)}
+.dsh-fisher-game[data-world=true]>.dsh-fisher-play-card{padding:10px 12px}
+.dsh-fisher-game[data-world=true]>.dsh-fisher-play-card p{font-size:12px;margin:5px 0}
 @keyframes dsh-fisher-water-flow{to{transform:translateX(-50%)}}
 @keyframes dsh-fisher-water-bubble{0%{transform:translateY(0);opacity:0}25%{opacity:.8}100%{transform:translateY(-23px);opacity:0}}
 @keyframes dsh-fisher-water-ripple{0%{transform:scale(.6);opacity:.8}100%{transform:scale(1.35);opacity:0}}

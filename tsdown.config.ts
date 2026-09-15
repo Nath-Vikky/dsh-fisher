@@ -44,4 +44,5 @@ const game: UserConfig = {
   }],
 };
 
-export default [host, client, game];
+const world:UserConfig={...game,entry:{world:'src/client/world/world.tsx'}};
+export default [host, client, game, world];

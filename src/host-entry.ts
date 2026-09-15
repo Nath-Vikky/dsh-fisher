@@ -48,6 +48,8 @@ export function apply(ctx: HostContext): void {
     const assets = new Map<string, { file: URL; contentType: string; cacheControl: string; buffer?: Promise<Buffer> }>([
       [`${API}/client/game.js`, { file: new URL('./game.js', import.meta.url),
         contentType: 'text/javascript; charset=utf-8', cacheControl: 'no-store' }],
+      [`${API}/client/world.js`, { file: new URL('./world.js', import.meta.url),
+        contentType: 'text/javascript; charset=utf-8', cacheControl: 'no-store' }],
     ]);
     const illustrations=[...Object.values(SPRITES).flatMap(variants=>Object.values(variants)),...Object.values(GEAR_ART),...visualIllustrations()];
     for (const filename of new Set([...illustrations.flatMap(file=>[file,thumbnailAsset(file)]),...Object.values(SCENE_ART)])) {
