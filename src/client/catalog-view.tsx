@@ -7,16 +7,18 @@ import type { RegionId,SpeciesId,Variant } from '../game/content.ts';
 import { regionUnlocked } from '../game/progression.ts';
 import type { GameController } from './controller.ts';
 import { createDialog } from './dialog.tsx';
-import { createHelp,createPager } from './compact-ui.tsx';
+import { createHelp,createPager,createSlotLayout } from './compact-ui.tsx';
 
 type Art=ReactTypes.ComponentType<{id:SpeciesId;variant?:Variant|null;large?:boolean}>;
 export function createCatalogView(React:typeof ReactTypes,FishArt:Art) {
   const Dialog=createDialog(React),Help=createHelp(React),Pager=createPager(React);
+  const useSlotLayout=createSlotLayout(React);
   return function Catalog({data,controller,blocked,onFish}:{data:Bootstrap;controller:GameController;blocked:boolean;onFish:()=>void}) {
     const [location,setLocation]=React.useState<RegionId>(data.journey.region),[search,setSearch]=React.useState('');
     const [kind,setKind]=React.useState('all'),[discovery,setDiscovery]=React.useState('all'),[rarity,setRarity]=React.useState('all');
     const [selected,setSelected]=React.useState<SpeciesId|null>(null),[variant,setVariant]=React.useState<Variant>('original');
     const [page,setPage]=React.useState(0),[filters,setFilters]=React.useState(false);
+    const {ref,pageSize}=useSlotLayout();
     React.useEffect(()=>{setPage(0);},[location,search,kind,discovery,rarity]);
     const idle=!data.active&&!data.pending;
     const travel=async(id:SpeciesId,targeted:boolean)=>{
@@ -30,8 +32,8 @@ export function createCatalogView(React:typeof ReactTypes,FishArt:Art) {
       &&(discovery==='all'||!!data.catalog[entry.id]===(discovery==='known'))
       &&(rarity==='all'||entry.rarity===Number(rarity))
       &&(!search||(data.catalog[entry.id]&&entry.name.includes(search))));
-    const pages=Math.max(1,Math.ceil(entries.length/4)),currentPage=Math.min(page,pages-1);
-    return <section className="dsh-fisher-collection dsh-fisher-catalog" aria-label="海岸图鉴"><div className="dsh-fisher-collection-intro"><div className="dsh-fisher-card-heading"><h3>水边的相遇</h3><Help label="图鉴说明"><p>发现会留下，出售或放流不影响图鉴。点击条目查看外观、纪录和线索。</p></Help></div>
+    const pages=Math.max(1,Math.ceil(entries.length/pageSize)),currentPage=Math.min(page,pages-1);
+    return <section ref={ref} className="dsh-fisher-collection dsh-fisher-catalog" aria-label="海岸图鉴"><div className="dsh-fisher-collection-intro"><div className="dsh-fisher-card-heading"><h3>水边的相遇</h3><Help label="图鉴说明"><p>发现会留下，出售或放流不影响图鉴。点击条目查看外观、纪录和线索。</p></Help></div>
       <div className="dsh-fisher-actions">{REGIONS.map(item=><button key={item.id} aria-pressed={location===item.id} onClick={()=>{setLocation(item.id);setSelected(null);}}>{item.name}</button>)}</div>
       <div className="dsh-fisher-search-row"><input aria-label="搜索图鉴" placeholder="搜索已发现的名字" value={search} onChange={event=>setSearch(event.target.value)}/><button aria-haspopup="dialog" onClick={()=>setFilters(true)}>筛选{[kind,discovery,rarity].some(value=>value!=='all')?' · 已选':''}</button></div></div>
       {filters&&<Dialog title="筛选图鉴" onClose={()=>setFilters(false)}>
@@ -40,7 +42,7 @@ export function createCatalogView(React:typeof ReactTypes,FishArt:Art) {
         <label>稀有度<select value={rarity} onChange={event=>setRarity(event.target.value)}><option value="all">全部</option>{['常见','少见','稀有','珍奇'].map((name,index)=><option key={name} value={index+1}>{name}</option>)}</select></label></div>
       </Dialog>}
       {!entries.length&&<p>这一页暂时没有符合筛选的相遇。</p>}
-      <div className="dsh-fisher-catalog-grid">{entries.slice(currentPage*4,currentPage*4+4).map(entry=>{
+      <div className="dsh-fisher-catalog-grid dsh-fisher-slot-grid">{entries.slice(currentPage*pageSize,currentPage*pageSize+pageSize).map(entry=>{
         const record=data.catalog[entry.id],clue=data.journey.completed[entry.region]>=10&&entry.kind!=='guest';
         const available=VARIANTS.filter(id=>record?.variants[id]),chosen=available.includes(variant)?variant:available[0]??'original';
         const opened=selected===entry.id,unlocked=regionUnlocked(entry.region,data.experience,data.research);

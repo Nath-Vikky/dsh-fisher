@@ -1,5 +1,17 @@
 import type * as ReactTypes from 'react';
 
+export function createSlotLayout(React:typeof ReactTypes) {
+  return function useSlotLayout() {
+    const ref=React.useRef<HTMLElement>(null),[pageSize,setPageSize]=React.useState(6);
+    React.useLayoutEffect(()=>{
+      const panel=ref.current?.closest<HTMLElement>('.dsh-fisher-panel');if(!panel)return;
+      const measure=()=>setPageSize(panel.getBoundingClientRect().height<=560?3:6);
+      measure();const observer=new ResizeObserver(measure);observer.observe(panel);return ()=>observer.disconnect();
+    },[]);
+    return {ref,pageSize};
+  };
+}
+
 export function createHelp(React:typeof ReactTypes) {
   return function Help({label,children}:{label:string;children:ReactTypes.ReactNode}) {
     const [open,setOpen]=React.useState(false),button=React.useRef<HTMLButtonElement>(null),tip=React.useRef<HTMLDivElement>(null);

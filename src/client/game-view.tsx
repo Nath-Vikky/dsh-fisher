@@ -21,6 +21,8 @@ import { CoastSound } from './sound.ts';
 import { createInventoryView } from './inventory-view.tsx';
 import { createAutoFishingView } from './auto-fishing-view.tsx';
 import { createCoastIcon } from './coast-icons.tsx';
+import { createCoastBadge } from './coast-badge.tsx';
+import { createConversation } from './conversation.tsx';
 
 export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentType<GameProps> {
   const Scene = createScene(React);
@@ -30,6 +32,7 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
   const Dialog = createDialog(React);
   const Automatic=createAutoFishingView(React);
   const Icon=createCoastIcon(React);
+  const CoastBadge=createCoastBadge(React),Conversation=createConversation(React);
   const releaseLabel=(item:Catch)=>species(item.speciesId).creature?'放流':'回收';
   const measurements=(item:Catch)=>item.lengthMm===null?'海岸纪念':`${(item.lengthMm/10).toFixed(1)} cm · ${item.weightG} g`;
   function FishArt({ id, variant='original', large = false }: { id: SpeciesId; variant?:Variant|null; large?: boolean }) {
@@ -168,7 +171,7 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
           {pending?.isRecord&&data!.journey.loadout.float==='U04'&&<span className="dsh-fisher-record-flag">新纪录</span>}
         </div>}
       </>}
-      <div className="dsh-fisher-hud-top"><button className="dsh-fisher-hud-location" title={`${location.name} · ${data?TIDE_NAMES[currentTide(data.journey)]:'平潮'}`} onClick={()=>changeTab('harbor')} aria-haspopup="dialog"><Icon name="compass"/><span>{location.name}</span></button><button className="dsh-fisher-hud-wallet" onClick={()=>openPanel('status')} aria-label={`海岸状态，${data?.coins??0} 壳币`} aria-haspopup="dialog"><Icon name="coin"/>{data?.coins??'—'}</button></div>
+      <div className="dsh-fisher-hud-top"><button className="dsh-fisher-hud-location" title="查看码头与钓点" onClick={()=>changeTab('harbor')} aria-haspopup="dialog"><CoastBadge region={location.id}/><span className="dsh-fisher-coast-name">{location.name}</span><small>{data?TIDE_NAMES[currentTide(data.journey)]:'平潮'}<i aria-hidden="true"> · </i>Lv.{levelInfo(data?.experience??0).level}</small></button><button className="dsh-fisher-hud-wallet" onClick={()=>openPanel('status')} aria-label={`海岸状态，${data?.coins??0} 壳币，${data?.tokens??0} 潮汐碎片`} aria-haspopup="dialog"><span><Icon name="coin"/>{data?.coins??'—'}</span><small><Icon name="star"/>{data?.tokens??'—'}</small></button></div>
       <nav className="dsh-fisher-hud-menu" aria-label="海岸功能">
         <button aria-haspopup="dialog" title={`图鉴 ${Object.keys(data?.catalog??{}).length}/${SPECIES.length}`} onClick={()=>changeTab('catalog')}><Icon name="book"/><span>图鉴</span></button>
         <button aria-haspopup="dialog" title={`背包 ${data?.inventory.length??0}`} onClick={()=>changeTab('inventory')}><Icon name="bag"/><span>背包</span></button>
@@ -185,7 +188,7 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
       </div>}
       {!obscured&&<>
       {prepareFishing&&!cast&&!data?.autoFishing.enabled&&<Dialog title="这一竿的准备" onClose={()=>setPrepareFishing(false)} busy={view.busy} closeLabel="回到岸边">{fishingPanel}</Dialog>}
-      {talk&&visitor&&<Dialog title={visitor.name} onClose={()=>setTalk(false)} closeLabel="继续散步"><p>{visitorLine}</p><button onClick={()=>{setTalk(false);changeTab('life');}}>翻开来客手记</button></Dialog>}
+      {talk&&visitor&&data&&<Conversation key={visitor.id} definition={visitor} outfit={data.life.guests[visitor.id].outfit} opening={visitorLine!} onClose={()=>setTalk(false)} onJournal={()=>{setTalk(false);changeTab('life');}}/>}
       {panel==='fishing'&&<Dialog title="钓鱼操作" onClose={()=>setPanel(null)} closeLabel="回到岸边">{fishingPanel}</Dialog>}
       {panel==='automatic'&&data&&<Dialog title="随 DSH 自动钓鱼" onClose={()=>setPanel(null)} closeLabel="回到岸边"><Automatic.Controls data={data} controller={controller} disabled={blocked} onHistory={()=>setAutoHistory(true)}/><Automatic.Progress data={data} controller={controller} disabled={blocked} onCancel={()=>setCancelConfirm(true)} onHarbor={()=>{setPanel(null);changeTab('harbor');}}/></Dialog>}
       {panel==='status'&&<Dialog title="海岸状态" onClose={()=>setPanel(null)}><div className="dsh-fisher-stat-grid"><div><strong>{levelInfo(data?.experience??0).level}</strong><span>海岸等级</span></div><div><strong>{data?.coins??'—'}</strong><span>壳币</span></div><div><strong>{data?.tokens??'—'}</strong><span>潮汐碎片</span></div><div><strong>{data?.research??'—'}</strong><span>研究</span></div></div><p role="status">{view.error??(!view.connected?'海岸正在等待连接，进度已暂停。':view.busy?'正在保存…':'进度已保存在本机。')}</p>{(view.error||!view.connected)&&<button disabled={view.busy} onClick={()=>void controller.retry()}>{view.retryPending?'重试保存':'重新连接'}</button>}{data?.journey.overflow&&<p>有货币达到持有上限，超出部分未计入。</p>}</Dialog>}

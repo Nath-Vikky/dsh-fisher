@@ -25,7 +25,7 @@ function registerLayer(panel:HTMLElement,layer:HTMLElement):()=>void {
 }
 
 export function createDialog(React:typeof ReactTypes) {
-  return function Dialog({title,children,onClose,busy=false,returnFocus,closeLabel='返回',dismissOnBackdrop=true,closeDisabled=false,hint,className='',error,onRetry}:{title:string;children:ReactTypes.ReactNode;onClose:()=>void;busy?:boolean;returnFocus?:HTMLElement|null;closeLabel?:string;dismissOnBackdrop?:boolean;closeDisabled?:boolean;hint?:string;className?:string;error?:string|null;onRetry?:()=>void}) {
+  return function Dialog({title,children,onClose,busy=false,returnFocus,closeLabel='返回',dismissOnBackdrop=true,closeDisabled=false,hint,className='',layerClassName='',showFooter=true,error,onRetry}:{title:string;children:ReactTypes.ReactNode;onClose:()=>void;busy?:boolean;returnFocus?:HTMLElement|null;closeLabel?:string;dismissOnBackdrop?:boolean;closeDisabled?:boolean;hint?:string;className?:string;layerClassName?:string;showFooter?:boolean;error?:string|null;onRetry?:()=>void}) {
     const anchor=React.useRef<HTMLSpanElement>(null),element=React.useRef<HTMLDialogElement>(null),layer=React.useRef<HTMLDivElement>(null),outsideDown=React.useRef(false);
     const [panel,setPanel]=React.useState<HTMLElement|null>(null),titleId=React.useId();
     React.useLayoutEffect(()=>{setPanel(anchor.current?.closest<HTMLElement>('.dsh-fisher-panel')??null);},[]);
@@ -45,7 +45,7 @@ export function createDialog(React:typeof ReactTypes) {
     },[panel]);
     React.useLayoutEffect(()=>{element.current?.querySelector('.dsh-fisher-dialog-content')?.scrollTo({top:0});element.current?.focus({preventScroll:true});},[title]);
     const canClose=!busy&&!closeDisabled;
-    const content=<div ref={layer} className="dsh-fisher-dialog-layer"
+    const content=<div ref={layer} className={`dsh-fisher-dialog-layer ${layerClassName}`}
       onPointerDown={event=>{outsideDown.current=event.target===event.currentTarget;}}
       onPointerUp={event=>{if(outsideDown.current&&event.target===event.currentTarget&&dismissOnBackdrop&&canClose)onClose();outsideDown.current=false;}}
       onKeyDown={event=>{
@@ -64,7 +64,7 @@ export function createDialog(React:typeof ReactTypes) {
         <header className="dsh-fisher-dialog-header"><h3 id={titleId}>{title}</h3><button aria-label={`关闭${title}`} disabled={!canClose} onClick={onClose}>×</button></header>
         <div className="dsh-fisher-dialog-content">{children}</div>
         {error&&<div className="dsh-fisher-dialog-error" role="alert"><span>{error}</span>{onRetry&&<button disabled={busy} onClick={onRetry}>重试保存</button>}</div>}
-        <footer className="dsh-fisher-dialog-footer">{hint&&<small>{hint}</small>}<button disabled={!canClose} onClick={onClose}>{closeLabel}</button></footer>
+        {showFooter&&<footer className="dsh-fisher-dialog-footer">{hint&&<small>{hint}</small>}<button disabled={!canClose} onClick={onClose}>{closeLabel}</button></footer>}
       </dialog>
     </div>;
     return <><span ref={anchor} hidden/>{panel&&renderPortal(content,panel)}</>;

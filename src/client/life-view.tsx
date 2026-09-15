@@ -18,6 +18,7 @@ import { thumbnailAsset } from '../game/art.ts';
 import { createShowcase } from './showcase.tsx';
 import { createDialog } from './dialog.tsx';
 import { createHelp,createPager } from './compact-ui.tsx';
+import { createConversation } from './conversation.tsx';
 
 interface Props { data:Bootstrap; controller:GameController; blocked:boolean; onFish:()=>void; reducedMotion?:boolean; lowPerformance?:boolean }
 type Art = ReactTypes.ComponentType<{id:SpeciesId;variant?:Variant|null;large?:boolean}>;
@@ -26,7 +27,7 @@ const catchLabel=(item:Catch)=>`${species(item.speciesId).name}${item.lengthMm==
 const protectedCatch=(item:Catch)=>item.isNew||item.isNewVariant||item.isRecord;
 
 export function createLifeView(React:typeof ReactTypes,FishArt:Art) {
-  const Showcase=createShowcase(React),Dialog=createDialog(React),Help=createHelp(React),Pager=createPager(React);
+  const Showcase=createShowcase(React),Dialog=createDialog(React),Help=createHelp(React),Pager=createPager(React),Conversation=createConversation(React);
   function QuestCard({quest,data,controller,blocked}:{quest:Quest}&Omit<Props,'onFish'>) {
     const [skipping,setSkipping]=React.useState(false);
     const [selected,setSelected]=React.useState<string[]>([]);
@@ -60,7 +61,7 @@ export function createLifeView(React:typeof ReactTypes,FishArt:Art) {
     const state=data.life.guests[definition.id];
     const [pane,setPane]=React.useState<'visit'|'request'|'story'|'outfit'>(state.stage?'visit':'request'),[story,setStory]=React.useState(0);
     const [route,setRoute]=React.useState<'record'|'catches'>('catches');
-    const [line,setLine]=React.useState(0);
+    const [chat,setChat]=React.useState(false);
     const next=guestGoal(definition.id,state.stage,route),status=state.task?goalProgress(state.task,data):null;
     const eligible=guestEligible(definition.id,data),invitation=data.journey.invitations.includes(definition.id);
     const goInvite=async()=>{
@@ -72,8 +73,8 @@ export function createLifeView(React:typeof ReactTypes,FishArt:Art) {
       <div className="dsh-fisher-guest-heading">{state.stage>0&&guestPicture(definition.id,state.outfit,'chibi')?<img className="dsh-fisher-guest-thumbnail" src={`${API}/assets/${thumbnailAsset(guestPicture(definition.id,state.outfit,'chibi')!)}`} alt={definition.name} loading="lazy" decoding="async"/>:<FishArt id={definition.id}/>}<div><small>{region(definition.region).name}</small><h3>{definition.name}</h3><p>{['尚未相遇','初识','熟络','常客'][state.stage]}</p></div></div>
       <nav className="dsh-fisher-subtabs" aria-label="来客详情分类">{([['visit','闲聊'],['request','请求'],['story','故事'],['outfit','衣装']] as const).map(([id,label])=><button key={id} aria-pressed={pane===id} disabled={id==='visit'?state.stage===0:id==='story'?state.stage<2:id==='outfit'?state.stage===0:false} onClick={()=>setPane(id)}>{label}</button>)}</nav>
       {pane==='visit'&&state.stage>0&&<>
-        <p className="dsh-fisher-dialogue" role="status">“{definition.lines[2+line%4]}”</p>
-        <div className="dsh-fisher-actions"><button onClick={()=>setLine(value=>value+1)}>聊一句</button><button disabled={blocked} onClick={()=>void controller.action({type:'guest.visit',guest:data.life.visitor===definition.id?null:definition.id})}>{data.life.visitor===definition.id?'让来客先歇歇':'请到岸边坐坐'}</button></div>
+        <p className="dsh-fisher-dialogue">“{definition.lines[2]}”</p>
+        <div className="dsh-fisher-actions"><button aria-haspopup="dialog" onClick={()=>setChat(true)}>聊一句</button><button disabled={blocked} onClick={()=>void controller.action({type:'guest.visit',guest:data.life.visitor===definition.id?null:definition.id})}>{data.life.visitor===definition.id?'让来客先歇歇':'请到岸边坐坐'}</button></div>
       </>}
       {pane==='request'&&<>
       {state.stage===0&&<p>{definition.requirement}{eligible?' · 前提已满足':''}</p>}
@@ -87,6 +88,7 @@ export function createLifeView(React:typeof ReactTypes,FishArt:Art) {
       {pane==='story'&&state.stage>=2&&<><nav className="dsh-fisher-subtabs" aria-label="故事页码"><button aria-pressed={story===0} onClick={()=>setStory(0)}>第一页</button><button disabled={state.stage<3} aria-pressed={story===1} onClick={()=>setStory(1)}>第二页</button></nav><p className="dsh-fisher-story">{definition.stories[story]}</p></>}
       {pane==='outfit'&&state.stage>0&&<><div className="dsh-fisher-portrait"><button aria-haspopup="dialog" onClick={onPortraitOpen}>查看来客立绘</button></div><label className="dsh-fisher-select-row">来客衣装<select aria-label={`${definition.name}的衣装`} value={state.outfit} disabled={blocked} onChange={event=>void controller.action({type:'guest.outfit',guest:definition.id,outfit:event.target.value==='alternate'?'alternate':'base'})}><option value="base">初见衣装</option><option value="alternate" disabled={state.stage<3}>{definition.alternate}{state.stage<3?' · 常客时解锁':''}</option></select></label></>}
       {portraitOpen&&<Dialog title={`${definition.name} · ${state.outfit==='base'?'初见衣装':definition.alternate}`} onClose={onPortraitOpen}><div className="dsh-fisher-portrait"><img src={`${API}/assets/${guestPicture(definition.id,state.outfit,'portrait')}`} alt={`${definition.name}的立绘`} decoding="async"/></div></Dialog>}
+      {chat&&<Conversation definition={definition} outfit={state.outfit} onClose={()=>setChat(false)}/>}
     </article>;
   }
   function Display({data,controller,blocked,reducedMotion=false,lowPerformance=false}:Omit<Props,'onFish'>) {

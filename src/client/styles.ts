@@ -1,3 +1,4 @@
+import { paperUiStyles } from './paper-ui.ts';
 export const styles = `
 .dsh-fisher,.dsh-fisher-settings{--fisher-paper:#f4efdb;--fisher-raised:#fcf8e9;--fisher-ink:#293f46;--fisher-muted:#536d70;--fisher-sea:#afd3c6;--fisher-coral:#e6b296;font:14px/1.6 system-ui,-apple-system,"Microsoft YaHei",sans-serif;color:var(--fisher-ink);box-sizing:border-box}
 .dsh-fisher *,.dsh-fisher-settings *{box-sizing:border-box;font-family:inherit}
@@ -284,4 +285,5 @@ export const styles = `
 .dsh-fisher-page-dialog .dsh-fisher-harbor-scene{display:none}.dsh-fisher-dialog .dsh-fisher-play-card{padding:0;border:0;box-shadow:none;background:none}
 .dsh-fisher-settings-dialog .dsh-fisher-settings{padding:0;max-width:none;border:0;box-shadow:none}.dsh-fisher-game[data-immersive=true]~.dsh-fisher-loading{margin:auto}
 @container (max-height:560px){.dsh-fisher-hud-menu{top:111px;gap:5px}.dsh-fisher .dsh-fisher-hud-menu button{width:43px;min-height:40px;padding:4px 3px}.dsh-fisher-hud-menu svg{width:17px;height:17px}.dsh-fisher .dsh-fisher-hud-menu button span{font-size:9px}.dsh-fisher-game[data-immersive=true] .dsh-fisher-world-waypoints{bottom:146px}.dsh-fisher-hud-fishing{right:67px}.dsh-fisher-game[data-immersive=true] .dsh-fisher-world-interaction{right:67px}.dsh-fisher-hud-fishing>.dsh-fisher-primary,.dsh-fisher-world-interaction>.dsh-fisher-primary{min-width:90px;min-height:65px;padding:8px}}
+${paperUiStyles}
 `;
