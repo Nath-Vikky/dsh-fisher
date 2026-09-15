@@ -58,9 +58,9 @@ export class Scenery {
       this.add('box','roofLight',x,.33,z,.05,.025,.05);
     }
     // Bench, landing sign and mail box form the visitor's little corner.
-    this.add('box','woodLight',3.45,.48,-.9,1.35,.12,.5);
-    this.add('box','woodLight',3.45,.82,-1.14,1.35,.42,.09);
-    for(const x of [2.95,3.95])this.add('box','wood',x,.24,-.9,.1,.5,.4);
+    this.add('box','woodLight',.85,.48,-.05,1.35,.12,.5);
+    this.add('box','woodLight',.85,.82,-.29,1.35,.42,.09);
+    for(const x of [.35,1.35])this.add('box','wood',x,.24,-.05,.1,.5,.4);
     this.add('box','wood',.56,.54,2.7,.1,1.05,.1);
     this.add('soft','cream',.56,.94,2.7,.66,.36,.09);
     this.add('box','blue',.56,.95,2.76,.35,.045,.025,.0,-.18);

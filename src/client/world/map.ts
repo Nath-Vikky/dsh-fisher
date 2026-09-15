@@ -5,7 +5,7 @@ export const SPAWN:Point={x:0,z:.6};
 export const PLACES={
   pier:{x:2,z:6.15,name:'木栈桥',radius:1.1},
   cove:{x:-3.3,z:3.25,name:'芦苇浅湾',radius:1.15},
-  guest:{x:3.3,z:-.45,name:'岸边来客',radius:1.35},
+  guest:{x:.1,z:1.1,name:'岸边来客',radius:1.1},
 } as const;
 export const TREES=[[-4.8,1.1,1.1],[-4.7,-3.9,1.2],[4.6,1.6,1.05],[4.5,-4,1.25],[.5,-3.8,1.15]] as const;
 const RADIUS=.23;
