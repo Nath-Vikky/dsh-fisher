@@ -18,6 +18,7 @@
     "lib/*.js",
     "assets/runtime/*.webp",
     "assets/readme/*.png",
+    "assets/readme/*.jpg",
     "cordis.patch.yml",
     "README.md",
     "assets/licenses/*.txt"
