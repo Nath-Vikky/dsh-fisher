@@ -23,6 +23,7 @@ export class CoastWorld {
   private systemMotion=matchMedia('(prefers-reduced-motion: reduce)');
   private target=new Vector3();private aim=new Vector3();private cameraOffset=new Vector3(10,17,15);
   private key:string;private started=performance.now();private wasAutomatic=false;private celebrateUntil=0;
+  private savedPosition='';private waterPoint=new Vector3();private uploaded=new WeakSet<object>();private diagnosticAt=0;
   constructor(private canvas:HTMLCanvasElement,options:WorldProps,private changed:(state:WorldState)=>void,private failed:()=>void){
     this.options=options;this.map=COASTS[options.data.journey.region];this.position={...this.map.spawn};
     this.key=`dsh-fisher:walk:v1:${options.data.saveId}${this.map.id==='L01'?'':`:${this.map.id}`}`;
@@ -35,6 +36,7 @@ export class CoastWorld {
     this.renderer.setClearColor(light.fog);this.renderer.toneMapping=ACESFilmicToneMapping;this.renderer.toneMappingExposure=light.exposure;
     this.renderer.shadowMap.type=PCFShadowMap;this.renderer.shadowMap.autoUpdate=false;
     this.scene.background=new Color(light.fog);this.scene.fog=new Fog(light.fog,27,60);
+    this.scene.matrixAutoUpdate=false;this.content.matrixAutoUpdate=false;
     const sun=new DirectionalLight(light.sun,light.strength);sun.position.set(-5,14,8);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-12;sun.shadow.camera.right=12;sun.shadow.camera.top=12;sun.shadow.camera.bottom=-12;sun.shadow.camera.near=.5;sun.shadow.camera.far=40;sun.shadow.bias=-.0004;sun.shadow.normalBias=.035;
     this.scene.add(new HemisphereLight(light.sky,light.ground,light.ambient),sun,this.content);
     this.scenery=new Scenery(this.map);this.content.add(this.scenery.group,this.player.group,this.visitor.group);
@@ -51,9 +53,12 @@ export class CoastWorld {
   }
   async prepare():Promise<void>{
     await nextTask();if(this.disposed)return;
-    await this.prepareActors();if(this.disposed)return;
+    const texturesStarted=performance.now();await this.prepareActors();if(this.disposed)return;
+    this.canvas.dataset.texturesMs=String(Math.round(performance.now()-texturesStarted));
     this.draw(0,false);
+    const compileStarted=performance.now();
     await this.renderer.compileAsync(this.scene,this.camera);
+    this.canvas.dataset.compileMs=String(Math.round(performance.now()-compileStarted));
     if(this.disposed)return;
     await nextTask();if(this.disposed)return;
     // Upload geometry and complete a real first frame behind the loading cover.
@@ -66,7 +71,16 @@ export class CoastWorld {
     const data=this.options.data,visitor=data.life.visitor,outfit=visitor?data.life.guests[visitor].outfit:'base';
     this.actorKey=`${visitor??''}|${outfit}|${data.journey.loadout.rod}`;
     await Promise.all([this.player.prepare(null,'base',data.journey.loadout.rod),this.visitor.prepare(visitor,outfit)]);
-    if(this.disposed)return;for(const texture of this.pictures.textures.values())this.renderer.initTexture(texture);this.start();
+    if(this.disposed)return;
+    let count=0;
+    for(const texture of this.pictures.textures.values()){
+      if(this.disposed)return;if(this.uploaded.has(texture))continue;
+      this.renderer.initTexture(texture);this.uploaded.add(texture);
+      if(++count%3===0)await nextTask();
+    }
+    if(this.disposed)return;
+    this.canvas.dataset.textureCacheHits=String(this.pictures.cacheHits);this.canvas.dataset.textureCacheMisses=String(this.pictures.cacheMisses);this.canvas.dataset.decodedBytes=String(this.pictures.decodedBytes);
+    this.start();
   }
   private resize=()=>{
     if(this.disposed)return;const rect=this.canvas.getBoundingClientRect();if(rect.width<1||rect.height<1)return;
@@ -135,7 +149,7 @@ export class CoastWorld {
       const target=this.path[0]!,length=distance(this.position,target),travel=Math.min(length,dt*2.2);
       if(length<.035){this.position={...target};this.path.shift();if(!this.path.length)this.destination=null;}
       else this.position=move(this.position,{x:(target.x-this.position.x)/length*travel,z:(target.z-this.position.z)/length*travel},this.map);
-    }else if(!this.locked&&!this.options.overlay)this.position=move(this.position,{x:this.input.x*2.65*dt,z:this.input.z*2.65*dt},this.map);
+    }else if(!this.locked&&!this.options.overlay&&dt>0&&(this.input.x||this.input.z))this.position=move(this.position,{x:this.input.x*2.65*dt,z:this.input.z*2.65*dt},this.map);
     const walking=distance(before,this.position)>.0001;
     if(walking){const facing=playerFacing(this.position.x-before.x,this.position.z-before.z,this.player.facing);this.player.face(facing.right,facing.back);this.time+=dt;}
     else if(!this.options.paused&&!this.reduced)this.time+=dt;
@@ -148,24 +162,24 @@ export class CoastWorld {
     this.player.animate(pose,this.time,this.reduced,this.camera);this.visitor.animate('idle',this.time,this.reduced,this.camera);this.scenery.update(this.reduced?0:this.time);
     this.line.visible=this.bobber.visible=atSpot;
     if(atSpot){
-      const place=this.map.places[this.spot].water!,tip=this.player.rodTip(),water=new Vector3(place.x,place.y,place.z);
+      const place=this.map.places[this.spot].water!,tip=this.player.rodTip(),water=this.waterPoint.set(place.x,place.y,place.z);
       this.bobber.position.copy(water);this.bobber.position.y+=(this.reduced||this.options.paused?0:Math.sin(this.time*2)*.035);
       const points=this.line.geometry.getAttribute('position');points.setXYZ(0,tip.x,tip.y,tip.z);points.setXYZ(1,(tip.x+water.x)/2,(tip.y+water.y)/2-.08,(tip.z+water.z)/2);points.setXYZ(2,water.x,this.bobber.position.y,water.z);points.needsUpdate=true;
     }
     if(render)this.renderer.render(this.scene,this.camera);
-    if(performance.now()-this.lastSave>2000){this.persist();this.lastSave=performance.now();}
+    const now=performance.now();
+    if(now-this.lastSave>2000){this.persist();this.lastSave=now;}
+    if(render&&now-this.diagnosticAt>1000){this.diagnosticAt=now;this.canvas.dataset.gpuTextures=String(this.renderer.info.memory.textures);this.canvas.dataset.gpuGeometries=String(this.renderer.info.memory.geometries);this.canvas.dataset.steadyDrawCalls=String(this.renderer.info.render.calls);}
     this.publish(walking);
   }
   private publish(walking=this.walking):void {
     this.walking=walking;
     const state:WorldState={near:nearby(this.position,!!this.options.data.life.visitor,this.map),walking,destination:this.destination,spot:this.spot,ready:this.ready};
     const value=JSON.stringify(state);if(value!==this.published){this.published=value;this.changed(state);}
-    this.canvas.dataset.playerX=this.position.x.toFixed(2);this.canvas.dataset.playerZ=this.position.z.toFixed(2);this.canvas.dataset.spot=this.spot;
-    this.canvas.dataset.actors='2d-cutouts';
-    this.canvas.dataset.playerFrame=this.player.frame;this.canvas.dataset.playerAction=this.player.action;
-    this.canvas.dataset.region=this.map.id;this.canvas.dataset.playerFacing=this.player.facing.back?'back':'front';
+    const attributes={playerX:this.position.x.toFixed(2),playerZ:this.position.z.toFixed(2),spot:this.spot,actors:'2d-cutouts',playerFrame:this.player.frame,playerAction:this.player.action,region:this.map.id,playerFacing:this.player.facing.back?'back':'front'};
+    for(const [key,text] of Object.entries(attributes))if(this.canvas.dataset[key]!==text)this.canvas.dataset[key]=text;
   }
-  private persist():void {try{localStorage.setItem(this.key,JSON.stringify({position:this.position,spot:this.spot}));}catch{/* Optional view preferences never block fishing. */}}
+  private persist():void {const value=JSON.stringify({position:this.position,spot:this.spot});if(value===this.savedPosition)return;try{localStorage.setItem(this.key,value);this.savedPosition=value;}catch{/* Optional view preferences never block fishing. */}}
   dispose():void {
     if(this.disposed)return;this.disposed=true;this.persist();cancelAnimationFrame(this.frame);
     this.resizeObserver.disconnect();this.intersection.disconnect();document.removeEventListener('visibilitychange',this.visibility);window.removeEventListener('blur',this.blur);window.removeEventListener('focus',this.focus);this.systemMotion.removeEventListener('change',this.start);this.canvas.removeEventListener('webglcontextlost',this.contextLost);

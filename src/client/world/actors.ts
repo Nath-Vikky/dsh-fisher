@@ -6,31 +6,36 @@ import type {Outfit} from '../../game/visuals.ts';
 import type {GuestId} from '../../game/guests.ts';
 import {PLAYER_DRAWN_HEIGHT,PLAYER_FOOT,PLAYER_HANDS,playerMotion} from '../player-motion.ts';
 import type {ActorPose} from '../player-motion.ts';
+import {DecodedCache} from '../decoded-cache.ts';
+import type {ImageLease} from '../decoded-cache.ts';
+
+const bitmaps=new DecodedCache<ImageBitmap>(async(file,signal)=>{
+  const response=await fetch(`${API}/assets/${file}`,{credentials:'same-origin',signal});
+  if(!response.ok)throw new Error(`Character image unavailable: ${file} (${response.status})`);
+  // Orientation is decoded once; every scene uploads its own GPU texture.
+  return createImageBitmap(await response.blob(),{imageOrientation:'flipY',premultiplyAlpha:'none'});
+},picture=>picture.close(),picture=>picture.width*picture.height*4,16*1024*1024);
 
 export class ActorTextures {
   textures=new Map<string,Texture>();
-  private pending=new Map<string,Promise<Texture>>();private cancel=new Set<()=>void>();private disposed=false;
+  private pending=new Map<string,Promise<Texture>>();private leases=new Map<string,ImageLease<ImageBitmap>>();private disposed=false;
+  cacheHits=0;cacheMisses=0;
+  get decodedBytes(){return bitmaps.bytes;}
   load(file:string):Promise<Texture>{
+    if(this.disposed)return Promise.reject(new Error('Character loading stopped'));
     const ready=this.textures.get(file);if(ready)return Promise.resolve(ready);
     const pending=this.pending.get(file);if(pending)return pending;
-    const task=new Promise<Texture>((resolve,reject)=>{
-      const controller=new AbortController();let done=false;
-      const finish=(error?:Error)=>{if(done)return;done=true;clearTimeout(timer);this.cancel.delete(cancel);if(error){controller.abort();reject(error);}};
-      const cancel=()=>finish(new Error('Character loading stopped'));
-      const timer=setTimeout(()=>finish(new Error(`Character image timed out: ${file}`)),15000);this.cancel.add(cancel);
-      void (async()=>{
-        const response=await fetch(`${API}/assets/${file}`,{credentials:'same-origin',signal:controller.signal});
-        if(!response.ok)throw new Error(`Character image unavailable: ${file} (${response.status})`);
-        // Decode before GPU upload; bitmap orientation is applied during decode, not texture upload.
-        const picture=await createImageBitmap(await response.blob(),{imageOrientation:'flipY',premultiplyAlpha:'none'});
-        if(done||this.disposed){picture.close();return;}
-        const texture=new Texture(picture);texture.flipY=false;texture.colorSpace=SRGBColorSpace;texture.magFilter=LinearFilter;texture.minFilter=LinearMipmapLinearFilter;texture.needsUpdate=true;
-        this.textures.set(file,texture);finish();resolve(texture);
-      })().catch(error=>finish(error instanceof Error?error:new Error('Character decoding failed')));
+    const lease=bitmaps.acquire(file);this.leases.set(file,lease);if(lease.cached)this.cacheHits++;else this.cacheMisses++;
+    const task=lease.ready.then(picture=>{
+      if(this.disposed)throw new Error('Character loading stopped');
+      const texture=new Texture(picture);texture.flipY=false;texture.colorSpace=SRGBColorSpace;texture.magFilter=LinearFilter;texture.minFilter=LinearMipmapLinearFilter;texture.needsUpdate=true;
+      this.textures.set(file,texture);return texture;
+    }).catch(error=>{
+      lease.release();this.leases.delete(file);this.pending.delete(file);throw error;
     });
-    this.pending.set(file,task);void task.catch(()=>this.pending.delete(file));return task;
+    this.pending.set(file,task);return task;
   }
-  dispose():void{this.disposed=true;for(const cancel of [...this.cancel])cancel();for(const texture of this.textures.values()){texture.dispose();(texture.image as ImageBitmap).close();}this.textures.clear();this.pending.clear();}
+  dispose():void{this.disposed=true;for(const texture of this.textures.values())texture.dispose();for(const lease of this.leases.values())lease.release();this.textures.clear();this.pending.clear();this.leases.clear();}
 }
 
 // Camera-facing cutouts retain the hand-painted detail while participating in scene depth.
@@ -38,7 +43,7 @@ export class SpriteActor {
   group=new Group();private material=new SpriteMaterial({alphaTest:.12,transparent:true,depthWrite:true,toneMapped:false});
   private sprite=new Sprite(this.material);private rodMaterial=new MeshStandardMaterial({color:'#795238',roughness:.65});private rod=new Group();
   private right=true;private picture='';private tip=new Vector3();private screenRight=new Vector3();private screenUp=new Vector3();private screenForward=new Vector3();private rodDirection=new Vector3();private up=new Vector3(0,1,0);
-  private height:number;private guestFile='';private pose:ActorPose='idle';private poseStarted=0;
+  private height:number;private guestFile='';private pose:ActorPose='idle';private poseStarted=0;private preparation=0;
   constructor(private pictures:ActorTextures,private visitor=false){
     this.height=visitor?2.18:2;this.sprite.center.set(.5,.02);this.sprite.scale.set(this.height,this.height,1);this.sprite.renderOrder=2;
     const shaft=new Mesh(new CylinderGeometry(.011,.025,2.1,7),this.rodMaterial);shaft.position.y=1.05;
@@ -50,11 +55,15 @@ export class SpriteActor {
     shadow.rotation.x=-Math.PI/2;shadow.scale.set(1,.62,1);shadow.position.y=.014;this.group.add(shadow);
   }
   async prepare(guest?:GuestId|null,outfit:Outfit='base',rod='D01'):Promise<void>{
+    const preparation=++this.preparation;
     const files:string[]=this.visitor?(guest?[guestPicture(guest,outfit,'chibi')!]:[]):Object.values(WORLD_PLAYER_ART);
     if(this.visitor)this.guestFile=files[0]??'';
     else{const colors:Record<string,string>={D01:'#795238',D02:'#54785c',D03:'#617e9b',D04:'#424e69',D05:'#60a9a4',D06:'#b79662'};this.rodMaterial.color.set(colors[rod]??colors.D01!);}
     await Promise.all(files.map(file=>this.pictures.load(file)));
-    this.material.map=this.pictures.textures.get(this.visitor?this.guestFile:WORLD_PLAYER_ART.idle)??null;this.material.needsUpdate=true;
+    if(preparation!==this.preparation)return;
+    const map=this.pictures.textures.get(this.visitor?this.guestFile:WORLD_PLAYER_ART.idle)??null;
+    if(!!map!==!!this.material.map)this.material.needsUpdate=true;
+    this.material.map=map;this.picture='';
     this.sprite.center.y=this.visitor?(guest==='G003'&&outfit==='base'?.076:.02):1-PLAYER_FOOT;
   }
   private back=false;
@@ -66,7 +75,7 @@ export class SpriteActor {
     const file=this.visitor?this.guestFile:motion.file;
     const texture=this.pictures.textures.get(file);
     if(texture){
-      if(this.picture!==file){this.material.map=texture;this.material.needsUpdate=true;this.picture=file;}
+      if(this.picture!==file){if(!this.material.map)this.material.needsUpdate=true;this.material.map=texture;this.picture=file;}
       const source=texture.image as ImageBitmap;
       const height=this.visitor?this.height:this.height/PLAYER_DRAWN_HEIGHT;
       this.sprite.scale.set(height*source.width/source.height,height*(this.visitor?1:motion.stretch),1);
@@ -87,5 +96,5 @@ export class SpriteActor {
   rodTip():Vector3{return this.tip;}
   get frame():string{return this.picture;}
   get action():ActorPose{return this.pose;}
-  dispose():void{this.material.dispose();}
+  dispose():void{this.preparation++;this.material.dispose();}
 }

@@ -1,4 +1,3 @@
-import { readFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Context } from '@deepseek-ai/cordis';
 import type { HostConnectionHandle } from '@deepseek-ai/dsh-client-connection';
@@ -12,6 +11,7 @@ import { SCENE_ART,visualIllustrations } from './game/visuals.ts';
 import { ActionError, FisherService, workClock } from './host/service.ts';
 import { WorkAdapter } from './host/work-adapter.ts';
 import { MAX_SAVE_BYTES } from './host/save-codec.ts';
+import { StaticAsset } from './host/static-asset.ts';
 
 export const name = 'dsh-fisher';
 export const inject = ['webServer', 'connection', 'sessions'];
@@ -45,16 +45,13 @@ export function apply(ctx: HostContext): void {
       }
     };
     void ready.then(syncObservation).catch(() => {});
-    const assets = new Map<string, { file: URL; contentType: string; cacheControl: string; buffer?: Promise<Buffer> }>([
-      [`${API}/client/game.js`, { file: new URL('./game.js', import.meta.url),
-        contentType: 'text/javascript; charset=utf-8', cacheControl: 'no-store' }],
-      [`${API}/client/world.js`, { file: new URL('./world.js', import.meta.url),
-        contentType: 'text/javascript; charset=utf-8', cacheControl: 'no-store' }],
+    const assets = new Map<string, StaticAsset>([
+      [`${API}/client/game.js`, new StaticAsset(new URL('./game.js', import.meta.url),'text/javascript; charset=utf-8',true)],
+      [`${API}/client/world.js`, new StaticAsset(new URL('./world.js', import.meta.url),'text/javascript; charset=utf-8',true)],
     ]);
     const illustrations=[...Object.values(SPRITES).flatMap(variants=>Object.values(variants)),...Object.values(GEAR_ART),...visualIllustrations()];
     for (const filename of new Set([...illustrations.flatMap(file=>[file,thumbnailAsset(file)]),...Object.values(SCENE_ART)])) {
-      assets.set(`${API}/assets/${filename}`, { file: new URL(`../assets/runtime/${filename}`, import.meta.url),
-        contentType: imageContentType(filename), cacheControl: 'private, max-age=604800, immutable' });
+      assets.set(`${API}/assets/${filename}`,new StaticAsset(new URL(`../assets/runtime/${filename}`,import.meta.url),imageContentType(filename)));
     }
     const revisionEvent = () => {
       const state = service.snapshot();
@@ -146,16 +143,8 @@ export function apply(ctx: HostContext): void {
         const asset = assets.get(pathname);
         if (asset) {
           try {
-            asset.buffer ??= readFile(asset.file);
-            const body = await asset.buffer;
-            if (disposed || response.destroyed) { response.end(); return; }
-            response.writeHead(200, {
-              'Content-Type': asset.contentType,
-              'Cache-Control': asset.cacheControl, 'X-Content-Type-Options': 'nosniff',
-            });
-            response.end(body);
+            await asset.send(request,response,()=>disposed);
           } catch {
-            delete asset.buffer;
             if (!response.destroyed) json(response, 503, { error: 'ASSET_UNAVAILABLE' });
           }
           return;

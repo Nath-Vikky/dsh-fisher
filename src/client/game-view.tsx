@@ -23,6 +23,7 @@ import { createAutoFishingView } from './auto-fishing-view.tsx';
 import { createCoastIcon } from './coast-icons.tsx';
 import { createCoastBadge } from './coast-badge.tsx';
 import { createConversation } from './conversation.tsx';
+import {retainConversationArt} from './portrait-art.tsx';
 
 export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentType<GameProps> {
   const Scene = createScene(React);
@@ -89,6 +90,8 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
     }, [controller]);
     React.useEffect(()=>{if(obscured)controller.pause();},[controller,obscured]);
     const data = view.data;
+    const currentGuest=data?.life.visitor,currentOutfit=currentGuest?data.life.guests[currentGuest].outfit:'base';
+    React.useEffect(()=>retainConversationArt(currentGuest,currentOutfit),[currentGuest,currentOutfit]);
     const cast = data?.active;
     const sim = view.sim;
     const phase = sim?.phase;

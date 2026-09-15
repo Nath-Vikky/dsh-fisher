@@ -45,6 +45,8 @@ export class Scenery {
     const sea=new Mesh(new PlaneGeometry(54,54),this.seaMaterial);sea.rotation.x=-Math.PI/2;sea.position.y=-.2;this.water.add(sea);
     for(const id of ['pier','cove'] as const){const point=map.places[id].water!;const ripple=new Mesh(new TorusGeometry(.32,.009,3,32),new MeshStandardMaterial({color:'#dcece0',transparent:true,opacity:.66,roughness:1,depthWrite:false}));ripple.rotation.x=-Math.PI/2;ripple.position.set(point.x,point.y+.014,point.z);this.ripples.push(ripple);this.water.add(ripple);}
     this.finish();
+    this.group.traverse(object=>{object.updateMatrix();object.matrixAutoUpdate=false;});
+    for(const ripple of this.ripples)ripple.matrixAutoUpdate=true;
   }
   private homeCoast():void{
     // Low slabs mark the garden paths, leaving both fishing approaches open.

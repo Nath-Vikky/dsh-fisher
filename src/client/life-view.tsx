@@ -19,6 +19,7 @@ import { createShowcase } from './showcase.tsx';
 import { createDialog } from './dialog.tsx';
 import { createHelp,createPager } from './compact-ui.tsx';
 import { createConversation } from './conversation.tsx';
+import {createPreparedPortrait,retainConversationArt} from './portrait-art.tsx';
 
 interface Props { data:Bootstrap; controller:GameController; blocked:boolean; onFish:()=>void; reducedMotion?:boolean; lowPerformance?:boolean }
 type Art = ReactTypes.ComponentType<{id:SpeciesId;variant?:Variant|null;large?:boolean}>;
@@ -27,7 +28,7 @@ const catchLabel=(item:Catch)=>`${species(item.speciesId).name}${item.lengthMm==
 const protectedCatch=(item:Catch)=>item.isNew||item.isNewVariant||item.isRecord;
 
 export function createLifeView(React:typeof ReactTypes,FishArt:Art) {
-  const Showcase=createShowcase(React),Dialog=createDialog(React),Help=createHelp(React),Pager=createPager(React),Conversation=createConversation(React);
+  const Showcase=createShowcase(React),Dialog=createDialog(React),Help=createHelp(React),Pager=createPager(React),Conversation=createConversation(React),Portrait=createPreparedPortrait(React);
   function QuestCard({quest,data,controller,blocked}:{quest:Quest}&Omit<Props,'onFish'>) {
     const [skipping,setSkipping]=React.useState(false);
     const [selected,setSelected]=React.useState<string[]>([]);
@@ -59,6 +60,7 @@ export function createLifeView(React:typeof ReactTypes,FishArt:Art) {
   }
   function GuestCard({definition,data,controller,blocked,onFish,portraitOpen,onPortraitOpen}:{definition:GuestDefinition;portraitOpen:boolean;onPortraitOpen:()=>void}&Props) {
     const state=data.life.guests[definition.id];
+    React.useEffect(()=>state.stage?retainConversationArt(definition.id,state.outfit,0):undefined,[definition.id,state.outfit,state.stage]);
     const [pane,setPane]=React.useState<'visit'|'request'|'story'|'outfit'>(state.stage?'visit':'request'),[story,setStory]=React.useState(0);
     const [route,setRoute]=React.useState<'record'|'catches'>('catches');
     const [chat,setChat]=React.useState(false);
@@ -87,7 +89,7 @@ export function createLifeView(React:typeof ReactTypes,FishArt:Art) {
       </>}
       {pane==='story'&&state.stage>=2&&<><nav className="dsh-fisher-subtabs" aria-label="故事页码"><button aria-pressed={story===0} onClick={()=>setStory(0)}>第一页</button><button disabled={state.stage<3} aria-pressed={story===1} onClick={()=>setStory(1)}>第二页</button></nav><p className="dsh-fisher-story">{definition.stories[story]}</p></>}
       {pane==='outfit'&&state.stage>0&&<><div className="dsh-fisher-portrait"><button aria-haspopup="dialog" onClick={onPortraitOpen}>查看来客立绘</button></div><label className="dsh-fisher-select-row">来客衣装<select aria-label={`${definition.name}的衣装`} value={state.outfit} disabled={blocked} onChange={event=>void controller.action({type:'guest.outfit',guest:definition.id,outfit:event.target.value==='alternate'?'alternate':'base'})}><option value="base">初见衣装</option><option value="alternate" disabled={state.stage<3}>{definition.alternate}{state.stage<3?' · 常客时解锁':''}</option></select></label></>}
-      {portraitOpen&&<Dialog title={`${definition.name} · ${state.outfit==='base'?'初见衣装':definition.alternate}`} onClose={onPortraitOpen}><div className="dsh-fisher-portrait"><img src={`${API}/assets/${guestPicture(definition.id,state.outfit,'portrait')}`} alt={`${definition.name}的立绘`} decoding="async"/></div></Dialog>}
+      {portraitOpen&&<Dialog title={`${definition.name} · ${state.outfit==='base'?'初见衣装':definition.alternate}`} onClose={onPortraitOpen}><div className="dsh-fisher-portrait"><Portrait file={guestPicture(definition.id,state.outfit,'portrait')!} alt={`${definition.name}的立绘`}/></div></Dialog>}
       {chat&&<Conversation definition={definition} outfit={state.outfit} onClose={()=>setChat(false)}/>}
     </article>;
   }

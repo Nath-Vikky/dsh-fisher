@@ -7,8 +7,10 @@ import { SPECIES,SPRITES,VARIANTS } from '../src/game/content.ts';
 import { GEAR_ART } from '../src/game/gear.ts';
 import { BAIT_ART,DECOR_ART,GUEST_ART,PLAYER_ART,WORLD_PLAYER_ART,SCENE_ART,visualIllustrations } from '../src/game/visuals.ts';
 import { thumbnailAsset } from '../src/game/art.ts';
+import {VERSION} from '../src/protocol.ts';
 
 const root=resolve(import.meta.dirname,'..'),directory=resolve(root,'assets/runtime');
+assert.equal(JSON.parse(await readFile(resolve(root,'package.json'),'utf8')).version,VERSION,'Client cache version must match the package');
 verifyContent();
 for(const entry of SPECIES) {
   for(const variant of entry.creature?VARIANTS:['original'] as const)assert.ok(SPRITES[entry.id][variant],`${entry.id}.${variant} is missing`);
