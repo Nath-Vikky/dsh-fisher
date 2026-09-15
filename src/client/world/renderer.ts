@@ -2,8 +2,11 @@ import {ACESFilmicToneMapping,BufferGeometry,Color,DirectionalLight,Float32Buffe
 import type {WorldProps} from './contracts.ts';
 import {Scenery,disposeModel} from './scenery.ts';
 import {ActorTextures,SpriteActor} from './actors.ts';
-import {PLACES,SPAWN,distance,move,nearby,route,screenDirection,walkable} from './map.ts';
+import {distance,move,nearby,route,screenDirection,walkable} from './map.ts';
 import type {PlaceId,Point,SpotId} from './map.ts';
+import {COASTS} from './regions.ts';
+import type {CoastMap} from './regions.ts';
+import {playerFacing} from '../player-motion.ts';
 
 export interface WorldState {near:PlaceId|null;walking:boolean;destination:PlaceId|null;spot:SpotId;ready:boolean}
 const nextTask=()=>new Promise<void>(resolve=>setTimeout(resolve,0));
@@ -13,7 +16,7 @@ export class CoastWorld {
   private scenery:Scenery;private pictures=new ActorTextures();private player=new SpriteActor(this.pictures);private visitor=new SpriteActor(this.pictures,true);private actorKey='';
   private line:Line;private bobber:Mesh;
   private options:WorldProps;
-  private position:Point={...SPAWN};private spot:SpotId='pier';private input:Point={x:0,z:0};
+  private map:CoastMap;private position:Point;private spot:SpotId='pier';private input:Point={x:0,z:0};
   private path:Point[]=[];private destination:PlaceId|null=null;private frame=0;private last=0;private time=0;
   private ready=false;private disposed=false;private visible=true;private focused=document.hasFocus();private published='';private lastSave=0;private walking=false;
   private resizeObserver:ResizeObserver;private intersection:IntersectionObserver;
@@ -21,19 +24,21 @@ export class CoastWorld {
   private target=new Vector3();private aim=new Vector3();private cameraOffset=new Vector3(10,17,15);
   private key:string;private started=performance.now();private wasAutomatic=false;private celebrateUntil=0;
   constructor(private canvas:HTMLCanvasElement,options:WorldProps,private changed:(state:WorldState)=>void,private failed:()=>void){
-    this.options=options;this.key=`dsh-fisher:walk:v1:${options.data.saveId}`;
+    this.options=options;this.map=COASTS[options.data.journey.region];this.position={...this.map.spawn};
+    this.key=`dsh-fisher:walk:v1:${options.data.saveId}${this.map.id==='L01'?'':`:${this.map.id}`}`;
     try{const saved=JSON.parse(localStorage.getItem(this.key)??'null') as {position?:Point;spot?:string}|null;
-      if(saved?.position&&walkable(saved.position))this.position={...saved.position};if(saved?.spot==='pier'||saved?.spot==='cove')this.spot=saved.spot;
+      if(saved?.position&&walkable(saved.position,this.map))this.position={...saved.position};if(saved?.spot==='pier'||saved?.spot==='cove')this.spot=saved.spot;
     }catch{/* Position is optional; game progress belongs to the host. */}
-    if(options.data.active||options.data.autoFishing.enabled)this.position={x:PLACES[this.spot].x,z:PLACES[this.spot].z};
+    const places=this.map.places,light=this.map.light;
+    if(options.data.active||options.data.autoFishing.enabled)this.position={x:places[this.spot].x,z:places[this.spot].z};
     this.renderer=new WebGLRenderer({canvas,antialias:true,powerPreference:'low-power',alpha:false});
-    this.renderer.setClearColor('#bbd9d4');this.renderer.toneMapping=ACESFilmicToneMapping;this.renderer.toneMappingExposure=1.05;
+    this.renderer.setClearColor(light.fog);this.renderer.toneMapping=ACESFilmicToneMapping;this.renderer.toneMappingExposure=light.exposure;
     this.renderer.shadowMap.type=PCFShadowMap;this.renderer.shadowMap.autoUpdate=false;
-    this.scene.background=new Color('#bbd9d4');this.scene.fog=new Fog('#bbd9d4',27,60);
-    const sun=new DirectionalLight('#fff0d2',3);sun.position.set(-5,14,8);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-12;sun.shadow.camera.right=12;sun.shadow.camera.top=12;sun.shadow.camera.bottom=-12;sun.shadow.camera.near=.5;sun.shadow.camera.far=40;sun.shadow.bias=-.0004;sun.shadow.normalBias=.035;
-    this.scene.add(new HemisphereLight('#fffae7','#72978d',1.6),sun,this.content);
-    this.scenery=new Scenery();this.content.add(this.scenery.group,this.player.group,this.visitor.group);
-    this.visitor.group.position.set(PLACES.guest.x+.8,.145,PLACES.guest.z-.5);this.visitor.face(false);
+    this.scene.background=new Color(light.fog);this.scene.fog=new Fog(light.fog,27,60);
+    const sun=new DirectionalLight(light.sun,light.strength);sun.position.set(-5,14,8);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-12;sun.shadow.camera.right=12;sun.shadow.camera.top=12;sun.shadow.camera.bottom=-12;sun.shadow.camera.near=.5;sun.shadow.camera.far=40;sun.shadow.bias=-.0004;sun.shadow.normalBias=.035;
+    this.scene.add(new HemisphereLight(light.sky,light.ground,light.ambient),sun,this.content);
+    this.scenery=new Scenery(this.map);this.content.add(this.scenery.group,this.player.group,this.visitor.group);
+    this.visitor.group.position.set(places.guest.x+.8,.145,places.guest.z-.5);this.visitor.face(false);
     const lineGeometry=new BufferGeometry();lineGeometry.setAttribute('position',new Float32BufferAttribute(new Float32Array(9),3));
     this.line=new Line(lineGeometry,new LineBasicMaterial({color:'#657c79',transparent:true,opacity:.8}));this.line.frustumCulled=false;this.content.add(this.line);
     this.bobber=new Mesh(new SphereGeometry(.065,8,6),new MeshLambertMaterial({color:'#e7a488'}));this.content.add(this.bobber);
@@ -89,7 +94,7 @@ export class CoastWorld {
     if(auto&&!this.wasAutomatic)this.go(this.spot,true);
     if(!auto&&this.wasAutomatic){this.path=[];this.destination=null;}
     this.wasAutomatic=auto;
-    if(options.data.active&&!options.data.active.automatic&&!before.data.active){this.path=[];this.destination=null;this.position={x:PLACES[this.spot].x,z:PLACES[this.spot].z};}
+    if(options.data.active&&!options.data.active.automatic&&!before.data.active){this.path=[];this.destination=null;const place=this.map.places[this.spot];this.position={x:place.x,z:place.z};}
     if(this.locked||options.overlay)this.input={x:0,z:0};
     if(!!before.data.active!==!!options.data.active||before.lowPerformance!==options.lowPerformance)this.resize();
     this.publish();this.start();
@@ -101,12 +106,12 @@ export class CoastWorld {
   }
   go(id:PlaceId,automatic=false):void {
     if(this.disposed||this.locked&&!automatic||id==='guest'&&!this.options.data.life.visitor)return;
-    const target=PLACES[id];this.path=route(this.position,target);this.destination=this.path.length?id:null;this.input={x:0,z:0};
+    const target=this.map.places[id];this.path=route(this.position,target,this.map);this.destination=this.path.length?id:null;this.input={x:0,z:0};
     if(id!=='guest')this.spot=id;this.publish();this.start();
   }
   dock():boolean {
-    const at=nearby(this.position,false);if(at!=='pier'&&at!=='cove'||this.locked)return false;
-    this.spot=at;this.position={x:PLACES[at].x,z:PLACES[at].z};this.path=[];this.destination=null;this.input={x:0,z:0};this.persist();this.start();return true;
+    const at=nearby(this.position,false,this.map);if(at!=='pier'&&at!=='cove'||this.locked)return false;
+    this.spot=at;const place=this.map.places[at];this.position={x:place.x,z:place.z};this.path=[];this.destination=null;this.input={x:0,z:0};this.persist();this.start();return true;
   }
   private start=()=>{
     if(this.suspended){cancelAnimationFrame(this.frame);this.frame=0;if(this.ready&&!this.disposed)this.canvas.dataset.renderState='paused';return;}
@@ -129,10 +134,10 @@ export class CoastWorld {
     if(canMove&&this.path.length){
       const target=this.path[0]!,length=distance(this.position,target),travel=Math.min(length,dt*2.2);
       if(length<.035){this.position={...target};this.path.shift();if(!this.path.length)this.destination=null;}
-      else this.position=move(this.position,{x:(target.x-this.position.x)/length*travel,z:(target.z-this.position.z)/length*travel});
-    }else if(!this.locked&&!this.options.overlay)this.position=move(this.position,{x:this.input.x*2.65*dt,z:this.input.z*2.65*dt});
+      else this.position=move(this.position,{x:(target.x-this.position.x)/length*travel,z:(target.z-this.position.z)/length*travel},this.map);
+    }else if(!this.locked&&!this.options.overlay)this.position=move(this.position,{x:this.input.x*2.65*dt,z:this.input.z*2.65*dt},this.map);
     const walking=distance(before,this.position)>.0001;
-    if(walking){this.player.face((this.position.x-before.x)*.832-(this.position.z-before.z)*.555>=0);this.time+=dt;}
+    if(walking){const facing=playerFacing(this.position.x-before.x,this.position.z-before.z,this.player.facing);this.player.face(facing.right,facing.back);this.time+=dt;}
     else if(!this.options.paused&&!this.reduced)this.time+=dt;
     const atSpot=!this.path.length&&(!!active||auto);
     if(atSpot)this.player.face(false);
@@ -143,7 +148,7 @@ export class CoastWorld {
     this.player.animate(pose,this.time,this.reduced,this.camera);this.visitor.animate('idle',this.time,this.reduced,this.camera);this.scenery.update(this.reduced?0:this.time);
     this.line.visible=this.bobber.visible=atSpot;
     if(atSpot){
-      const place=PLACES[this.spot],tip=this.player.rodTip(),water=new Vector3(place.x,-.2,place.z+1.65);
+      const place=this.map.places[this.spot].water!,tip=this.player.rodTip(),water=new Vector3(place.x,place.y,place.z);
       this.bobber.position.copy(water);this.bobber.position.y+=(this.reduced||this.options.paused?0:Math.sin(this.time*2)*.035);
       const points=this.line.geometry.getAttribute('position');points.setXYZ(0,tip.x,tip.y,tip.z);points.setXYZ(1,(tip.x+water.x)/2,(tip.y+water.y)/2-.08,(tip.z+water.z)/2);points.setXYZ(2,water.x,this.bobber.position.y,water.z);points.needsUpdate=true;
     }
@@ -153,16 +158,17 @@ export class CoastWorld {
   }
   private publish(walking=this.walking):void {
     this.walking=walking;
-    const state:WorldState={near:nearby(this.position,!!this.options.data.life.visitor),walking,destination:this.destination,spot:this.spot,ready:this.ready};
+    const state:WorldState={near:nearby(this.position,!!this.options.data.life.visitor,this.map),walking,destination:this.destination,spot:this.spot,ready:this.ready};
     const value=JSON.stringify(state);if(value!==this.published){this.published=value;this.changed(state);}
     this.canvas.dataset.playerX=this.position.x.toFixed(2);this.canvas.dataset.playerZ=this.position.z.toFixed(2);this.canvas.dataset.spot=this.spot;
     this.canvas.dataset.actors='2d-cutouts';
     this.canvas.dataset.playerFrame=this.player.frame;this.canvas.dataset.playerAction=this.player.action;
+    this.canvas.dataset.region=this.map.id;this.canvas.dataset.playerFacing=this.player.facing.back?'back':'front';
   }
   private persist():void {try{localStorage.setItem(this.key,JSON.stringify({position:this.position,spot:this.spot}));}catch{/* Optional view preferences never block fishing. */}}
   dispose():void {
     if(this.disposed)return;this.disposed=true;this.persist();cancelAnimationFrame(this.frame);
     this.resizeObserver.disconnect();this.intersection.disconnect();document.removeEventListener('visibilitychange',this.visibility);window.removeEventListener('blur',this.blur);window.removeEventListener('focus',this.focus);this.systemMotion.removeEventListener('change',this.start);this.canvas.removeEventListener('webglcontextlost',this.contextLost);
-    this.line.geometry.dispose();(this.line.material as LineBasicMaterial).dispose();this.player.dispose();this.visitor.dispose();this.pictures.dispose();disposeModel(this.content);this.renderer.dispose();this.renderer.forceContextLoss();this.scene.clear();
+    this.line.geometry.dispose();(this.line.material as LineBasicMaterial).dispose();this.player.dispose();this.visitor.dispose();this.pictures.dispose();disposeModel(this.content);this.scenery.pondMaterial.dispose();this.renderer.dispose();this.renderer.forceContextLoss();this.scene.clear();
   }
 }

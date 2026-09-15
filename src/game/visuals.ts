@@ -42,6 +42,7 @@ export const BAIT_ART: Record<BaitId,string> = {
 export const WORLD_PLAYER_ART={
   idle:'p001-whale-idle-v1.webp',blink:'p001-whale-blink-v1.webp',
   walkA:'p001-whale-walk-a-v1.webp',walkB:'p001-whale-walk-b-v1.webp',
+  rearIdle:'p001-whale-rear-idle-v1.webp',rearWalkA:'p001-whale-rear-walk-a-v1.webp',rearWalkB:'p001-whale-rear-walk-b-v1.webp',
   cast:'p001-whale-cast-v1.webp',hold:'p001-whale-hold-v1.webp',
   reel:'p001-whale-reel-v1.webp',surprise:'p001-whale-surprise-v1.webp',
 } as const;

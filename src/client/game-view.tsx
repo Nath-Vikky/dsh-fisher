@@ -92,9 +92,10 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
     const pending = data?.pending;
     const automatic=cast?.automatic;
     React.useEffect(()=>{if(cast&&!automatic)setPanel(value=>value==='automatic'?null:value);},[cast?.id,!!automatic]);
-    const worldMode=data?.journey.region==='L01'&&!worldFallback;
+    const worldMode=!!data&&!worldFallback;
     React.useEffect(()=>{if(cast||data?.autoFishing.enabled||tab!=='fishing')setPrepareFishing(false);},[cast?.id,data?.autoFishing.enabled,tab]);
     React.useEffect(()=>{setTalk(false);setPrepareFishing(false);setWorldFallback(false);setPanel(null);},[data?.saveId]);
+    React.useEffect(()=>{setWorldFallback(false);},[data?.journey.region]);
     React.useEffect(()=>setAutoHistory(false),[data?.saveId]);
     React.useEffect(()=>{
       if(!data)return;
@@ -157,7 +158,7 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
         </section>);
     return <div className="dsh-fisher-game" data-immersive="true" data-world={worldMode} ref={root} onPointerDown={()=>audio.activate()} onChangeCapture={event=>{const target=event.target;if(target instanceof HTMLSelectElement||target instanceof HTMLInputElement&&['checkbox','radio'].includes(target.type))audio.play('select');}} onKeyDown={event=>{audio.activate();if(event.key==='Escape'){event.stopPropagation();controller.pause();}}}>
       {data&&<>
-        {worldMode&&data?<div className="dsh-fisher-world-stage" data-fishing={!!cast||data.autoFishing.enabled}><World data={data} lowPerformance={lowPerformance} reducedMotion={reducedMotion} blocked={blocked}
+        {worldMode&&data?<div className="dsh-fisher-world-stage" data-fishing={!!cast||data.autoFishing.enabled}><World key={`${data.saveId}:${data.journey.region}`} data={data} lowPerformance={lowPerformance} reducedMotion={reducedMotion} blocked={blocked}
           pose={pending?'surprise':phase==='casting'?'cast':phase==='fighting'&&view.reel?'reel':cast?'hold':'idle'}
           paused={automatic?!data.autoFishing.working:!!cast&&view.paused}
           overlay={overlay}

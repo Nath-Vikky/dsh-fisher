@@ -57,10 +57,12 @@ export class SpriteActor {
     this.material.map=this.pictures.textures.get(this.visitor?this.guestFile:WORLD_PLAYER_ART.idle)??null;this.material.needsUpdate=true;
     this.sprite.center.y=this.visitor?(guest==='G003'&&outfit==='base'?.076:.02):1-PLAYER_FOOT;
   }
-  face(right:boolean):void{this.right=right;}
+  private back=false;
+  face(right:boolean,back=false):void{this.right=right;this.back=back;}
+  get facing(){return {right:this.right,back:this.back};}
   animate(pose:ActorPose,time:number,reduced:boolean,camera:Camera):void{
     if(pose!==this.pose){this.pose=pose;this.poseStarted=time;}
-    const motion=playerMotion(pose,time-this.poseStarted,reduced);
+    const motion=playerMotion(pose,time-this.poseStarted,reduced,this.back);
     const file=this.visitor?this.guestFile:motion.file;
     const texture=this.pictures.textures.get(file);
     if(texture){

@@ -11,12 +11,20 @@ export const PLAYER_HANDS:Record<string,readonly [number,number]>={
   [WORLD_PLAYER_ART.reel]:[.61769,.5946],
 };
 
-export function playerMotion(pose:ActorPose,elapsed:number,reduced=false){
+// The fixed camera looks along (-10, -17, -15). Keep the last facing on lateral motion.
+export function playerFacing(dx:number,dz:number,previous={right:true,back:false}){
+  const length=Math.hypot(dx,dz);if(length<.0001)return previous;
+  const horizontal=dx*.832-dz*.555,depth=dx*.555+dz*.832;
+  return {right:Math.abs(horizontal)>length*.18?horizontal>=0:previous.right,back:Math.abs(depth)>length*.2?depth<0:previous.back};
+}
+
+export function playerMotion(pose:ActorPose,elapsed:number,reduced=false,back=false){
   const t=reduced?0:Math.max(0,elapsed);
-  let file:string=WORLD_PLAYER_ART.idle,bob=0,rotation=0,stretch=1,rodLift=0;
+  const idle=back?WORLD_PLAYER_ART.rearIdle:WORLD_PLAYER_ART.idle;
+  let file:string=idle,bob=0,rotation=0,stretch=1,rodLift=0;
   if(pose==='walk'){
-    const steps=[WORLD_PLAYER_ART.walkA,WORLD_PLAYER_ART.idle,WORLD_PLAYER_ART.walkB,WORLD_PLAYER_ART.idle];
-    file=reduced?WORLD_PLAYER_ART.idle:steps[Math.floor(t*6)%steps.length]!;
+    const steps=back?[WORLD_PLAYER_ART.rearWalkA,idle,WORLD_PLAYER_ART.rearWalkB,idle]:[WORLD_PLAYER_ART.walkA,idle,WORLD_PLAYER_ART.walkB,idle];
+    file=reduced?idle:steps[Math.floor(t*6)%steps.length]!;
     if(!reduced){bob=Math.abs(Math.sin(t*Math.PI*3))*.03;rotation=Math.sin(t*Math.PI*3)*.009;}
   }else if(pose==='cast'){
     file=t<.25?WORLD_PLAYER_ART.cast:WORLD_PLAYER_ART.hold;
@@ -32,7 +40,7 @@ export function playerMotion(pose:ActorPose,elapsed:number,reduced=false){
     if(!reduced)bob=(1-Math.cos(Math.min(t,1)*Math.PI*2))*.025*Math.exp(-t*2);
   }else{
     const blink=t%4.8;
-    if(!reduced&&blink>=4.55&&blink<4.72)file=WORLD_PLAYER_ART.blink;
+    if(!back&&!reduced&&blink>=4.55&&blink<4.72)file=WORLD_PLAYER_ART.blink;
     if(!reduced)stretch=1+Math.sin(t*1.6)*.005;
   }
   return {file,bob,rotation,stretch,rodLift};

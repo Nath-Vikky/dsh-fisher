@@ -2,12 +2,13 @@ import type * as ReactTypes from 'react';
 import type {WorldProps} from './contracts.ts';
 import {CoastWorld} from './renderer.ts';
 import type {WorldState} from './renderer.ts';
-import {PLACES} from './map.ts';
+import {COASTS} from './regions.ts';
 import {createCoastIcon} from '../coast-icons.tsx';
 
 export function createWorld(React:typeof ReactTypes){
   const Icon=createCoastIcon(React);
   return function World(props:WorldProps){
+    const coast=COASTS[props.data.journey.region],PLACES=coast.places;
     const canvas=React.useRef<HTMLCanvasElement>(null),host=React.useRef<CoastWorld>(),latest=React.useRef(props);latest.current=props;
     const [state,setState]=React.useState<WorldState>({near:null,walking:false,destination:null,spot:'pier',ready:false});
     const [error,setError]=React.useState(false),[attempt,setAttempt]=React.useState(0),[knob,setKnob]=React.useState({x:0,y:0});
@@ -25,7 +26,7 @@ export function createWorld(React:typeof ReactTypes){
         }catch(error){if(canvas.current)canvas.current.dataset.loadError=error instanceof Error?error.message:'Scene initialization failed';runtime?.dispose();if(!disposed)setError(true);}
       },0);
       return ()=>{disposed=true;clearTimeout(timer);runtime?.dispose();host.current=undefined;};
-    },[props.data.saveId,attempt]);
+    },[props.data.saveId,props.data.journey.region,attempt]);
     React.useEffect(()=>{host.current?.update(props);if(locked)reset();},[props]);
     React.useEffect(()=>{const cancel=()=>reset();window.addEventListener('blur',cancel);document.addEventListener('visibilitychange',cancel);return ()=>{window.removeEventListener('blur',cancel);document.removeEventListener('visibilitychange',cancel);};},[]);
     const key=(event:ReactTypes.KeyboardEvent,pressed:boolean)=>{
@@ -42,7 +43,7 @@ export function createWorld(React:typeof ReactTypes){
     const finish=(event:ReactTypes.PointerEvent<HTMLButtonElement>)=>{if(drag.current!==event.pointerId)return;reset();if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);};
     const fish=()=>{if(host.current?.dock())props.onFish();};
     return <div className="dsh-fisher-world" onKeyDown={event=>key(event,true)} onKeyUp={event=>key(event,false)} onBlur={event=>{if(!event.currentTarget.contains(event.relatedTarget))reset();}}>
-      <canvas key={attempt} ref={canvas} tabIndex={0} role="img" aria-label="可以走动的摸鱼塘海岸，使用摇杆或方向键移动" onPointerDown={event=>event.currentTarget.focus()} data-render-state="loading"/>
+      <canvas key={`${coast.id}:${attempt}`} ref={canvas} tabIndex={0} role="img" aria-label={`可以走动的${coast.name}海岸，使用摇杆或方向键移动`} onPointerDown={event=>event.currentTarget.focus()} data-render-state="loading"/>
       {!locked&&state.ready&&!error&&<><div className="dsh-fisher-world-waypoints" aria-label="海岸导航">
         {navigation&&<div className="dsh-fisher-world-destinations">{(['pier','cove','guest'] as const).filter(id=>id!=='guest'||props.data.life.visitor).map(id=><button key={id} onClick={()=>{host.current?.go(id);setNavigation(false);}}>{PLACES[id].name}</button>)}</div>}
         <button className="dsh-fisher-navigation-button" aria-expanded={navigation} onClick={()=>setNavigation(value=>!value)}><Icon name="compass"/><span>{state.destination?`前往${PLACES[state.destination].name}`:'去哪里'}</span></button>
