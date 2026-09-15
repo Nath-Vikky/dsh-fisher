@@ -9,7 +9,7 @@ import type { AchievementId } from './game/achievements.ts';
 import type { GuestId } from './game/guests.ts';
 import type { DecorId, DecorSlot } from './game/decor.ts';
 import type { AutoCast,AutoFishingView } from './game/auto-fishing.ts';
-export const VERSION = '0.2.0-preview.1';
+export const VERSION = '0.2.0-preview.2';
 export const API = '/api/dsh-fisher/v1';
 export const COAST_ASSET = `${API}/assets/l01-coast-pixel-v1.webp`;
 export type LauncherStatus='shore'|'fishing'|'waiting';
@@ -76,6 +76,7 @@ export interface InputRequest extends Envelope {
 export interface MutationResult { snapshot: Bootstrap; appliedRevision: number; duplicate: boolean }
 
 export interface GameProps {
+  obscured?:boolean;
   onEnabledChange?:(enabled:boolean)=>void;
   lowPerformance: boolean;
   reducedMotion?: boolean;

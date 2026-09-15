@@ -1,0 +1,82 @@
+import {CircleGeometry,CylinderGeometry,Group,LinearFilter,LinearMipmapLinearFilter,Mesh,MeshBasicMaterial,MeshStandardMaterial,Sprite,SpriteMaterial,SRGBColorSpace,Texture,TorusGeometry,Vector3} from 'three';
+import type {Camera} from 'three';
+import {API} from '../../protocol.ts';
+import {WORLD_PLAYER_ART,guestPicture} from '../../game/visuals.ts';
+import type {PlayerPose,Outfit} from '../../game/visuals.ts';
+import type {GuestId} from '../../game/guests.ts';
+
+export type ActorPose=PlayerPose|'walk';
+export class ActorTextures {
+  textures=new Map<string,Texture>();
+  private pending=new Map<string,Promise<Texture>>();private cancel=new Set<()=>void>();private disposed=false;
+  load(file:string):Promise<Texture>{
+    const ready=this.textures.get(file);if(ready)return Promise.resolve(ready);
+    const pending=this.pending.get(file);if(pending)return pending;
+    const task=new Promise<Texture>((resolve,reject)=>{
+      const controller=new AbortController();let done=false;
+      const finish=(error?:Error)=>{if(done)return;done=true;clearTimeout(timer);this.cancel.delete(cancel);if(error){controller.abort();reject(error);}};
+      const cancel=()=>finish(new Error('Character loading stopped'));
+      const timer=setTimeout(()=>finish(new Error(`Character image timed out: ${file}`)),15000);this.cancel.add(cancel);
+      void (async()=>{
+        const response=await fetch(`${API}/assets/${file}`,{credentials:'same-origin',signal:controller.signal});
+        if(!response.ok)throw new Error(`Character image unavailable: ${file} (${response.status})`);
+        // Decode before GPU upload; bitmap orientation is applied during decode, not texture upload.
+        const picture=await createImageBitmap(await response.blob(),{imageOrientation:'flipY',premultiplyAlpha:'none'});
+        if(done||this.disposed){picture.close();return;}
+        const texture=new Texture(picture);texture.flipY=false;texture.colorSpace=SRGBColorSpace;texture.magFilter=LinearFilter;texture.minFilter=LinearMipmapLinearFilter;texture.needsUpdate=true;
+        this.textures.set(file,texture);finish();resolve(texture);
+      })().catch(error=>finish(error instanceof Error?error:new Error('Character decoding failed')));
+    });
+    this.pending.set(file,task);void task.catch(()=>this.pending.delete(file));return task;
+  }
+  dispose():void{this.disposed=true;for(const cancel of [...this.cancel])cancel();for(const texture of this.textures.values()){texture.dispose();(texture.image as ImageBitmap).close();}this.textures.clear();this.pending.clear();}
+}
+
+// Camera-facing cutouts retain the hand-painted detail while participating in scene depth.
+export class SpriteActor {
+  group=new Group();private material=new SpriteMaterial({alphaTest:.12,transparent:true,depthWrite:true,toneMapped:false});
+  private sprite=new Sprite(this.material);private rodMaterial=new MeshStandardMaterial({color:'#795238',roughness:.65});private rod=new Group();
+  private right=true;private picture='';private tip=new Vector3();private screenRight=new Vector3();private screenUp=new Vector3();private screenForward=new Vector3();private rodDirection=new Vector3();private up=new Vector3(0,1,0);
+  private height:number;private bob=0;private guestFile='';
+  constructor(private pictures:ActorTextures,private visitor=false){
+    this.height=visitor?2.18:2;this.sprite.center.set(.5,.02);this.sprite.scale.set(this.height,this.height,1);this.sprite.renderOrder=2;
+    const shaft=new Mesh(new CylinderGeometry(.011,.025,2.1,7),this.rodMaterial);shaft.position.y=1.05;
+    const handle=new Mesh(new CylinderGeometry(.047,.047,.28,8),new MeshStandardMaterial({color:'#d8bd84',roughness:.9}));handle.position.y=.05;
+    const reel=new Mesh(new TorusGeometry(.075,.017,5,12),new MeshStandardMaterial({color:'#5a7271',metalness:.45,roughness:.5}));reel.position.set(.07,.06,0);
+    this.rod.add(shaft,handle,reel);this.rod.visible=false;
+    this.group.add(this.sprite,this.rod);
+    const shadow=new Mesh(new CircleGeometry(.33,24),new MeshBasicMaterial({color:'#27483f',transparent:true,opacity:.23,depthWrite:false}));
+    shadow.rotation.x=-Math.PI/2;shadow.scale.set(1,.62,1);shadow.position.y=.014;this.group.add(shadow);
+  }
+  async prepare(guest?:GuestId|null,outfit:Outfit='base',rod='D01'):Promise<void>{
+    const files:string[]=this.visitor?(guest?[guestPicture(guest,outfit,'chibi')!]:[]):Object.values(WORLD_PLAYER_ART).filter((file):file is string=>!!file);
+    if(this.visitor)this.guestFile=files[0]??'';
+    else{const colors:Record<string,string>={D01:'#795238',D02:'#54785c',D03:'#617e9b',D04:'#424e69',D05:'#60a9a4',D06:'#b79662'};this.rodMaterial.color.set(colors[rod]??colors.D01!);}
+    await Promise.all(files.map(file=>this.pictures.load(file)));
+    this.material.map=this.pictures.textures.get(this.visitor?this.guestFile:WORLD_PLAYER_ART.idle)??null;this.material.needsUpdate=true;
+    this.sprite.center.y=this.visitor&&guest==='G003'&&outfit==='base'?.076:.02;
+  }
+  face(right:boolean):void{this.right=right;}
+  animate(pose:ActorPose,time:number,still:boolean,camera:Camera):void{
+    const step=pose==='walk'&&!still&&Math.floor(time*4)%2===1;
+    const file=this.visitor?this.guestFile:['cast','hold','reel'].includes(pose)?WORLD_PLAYER_ART.hold??WORLD_PLAYER_ART.idle:step?WORLD_PLAYER_ART.walk??WORLD_PLAYER_ART.idle:WORLD_PLAYER_ART.idle;
+    const texture=this.pictures.textures.get(file);
+    if(texture){
+      if(this.picture!==file){this.material.map=texture;this.material.needsUpdate=true;this.picture=file;}
+      const source=texture.image as ImageBitmap;this.sprite.scale.x=this.height*source.width/source.height;
+      texture.repeat.x=this.right?1:-1;texture.offset.x=this.right?0:1;
+    }
+    this.sprite.visible=!!texture;this.bob=pose==='walk'&&!still?Math.abs(Math.sin(time*9))*.045:0;this.sprite.position.y=this.bob;
+    this.material.rotation=pose==='walk'&&!still?Math.sin(time*9)*.012:0;
+    const fishing=!this.visitor&&['cast','hold','reel'].includes(pose);this.rod.visible=fishing;
+    if(!fishing)return;
+    const hand=WORLD_PLAYER_ART.hold?[this.right?.775:.225,.49]:[this.right?.735:.265,.604];
+    this.screenRight.setFromMatrixColumn(camera.matrixWorld,0);this.screenUp.setFromMatrixColumn(camera.matrixWorld,1);camera.getWorldDirection(this.screenForward);
+    this.rod.position.copy(this.screenRight).multiplyScalar((hand[0]!-.5)*this.sprite.scale.x).addScaledVector(this.screenUp,(1-hand[1]!-.02)*this.height).addScaledVector(this.screenForward,.018);
+    const bend=still?0:pose==='cast'?Math.sin(time*3)*.3:pose==='reel'?Math.sin(time*5)*.05:0;
+    this.rodDirection.set(0,1.2+bend,1.8).normalize();this.rod.quaternion.setFromUnitVectors(this.up,this.rodDirection);
+    this.tip.copy(this.group.position).add(this.rod.position).addScaledVector(this.rodDirection,2.1);
+  }
+  rodTip():Vector3{return this.tip;}
+  dispose():void{this.material.dispose();}
+}

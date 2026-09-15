@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {PLACES,SPAWN,distance,move,route,screenDirection,walkable} from '../src/client/world/map.ts';
+import {PLACES,POND,SPAWN,distance,move,route,screenDirection,walkable} from '../src/client/world/map.ts';
 
 test('movement stays on land and cannot tunnel through the house or water',()=>{
   assert.ok(walkable(SPAWN));assert.ok(walkable(PLACES.pier));assert.ok(walkable(PLACES.cove));
@@ -8,6 +8,9 @@ test('movement stays on land and cannot tunnel through the house or water',()=>{
   const wall=move({x:-3,z:-.8},{x:0,z:-8});assert.ok(walkable(wall));assert.ok(wall.z>-1.6);
   const shore=move(SPAWN,{x:14,z:9});assert.ok(walkable(shore));assert.ok(shore.x<5.6);
   assert.equal(walkable({x:NaN,z:0}),false);
+  assert.equal(walkable(POND),false);
+  const pondBank=move({x:POND.x,z:POND.z+1.7},{x:0,z:-3});
+  assert.ok(walkable(pondBank));assert.ok(pondBank.z>POND.z+POND.rz);
 });
 test('stick dead zone and diagonal input preserve the same maximum walking speed',()=>{
   assert.deepEqual(screenDirection(.03,.02),{x:0,z:0});

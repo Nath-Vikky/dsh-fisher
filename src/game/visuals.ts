@@ -46,10 +46,11 @@ export const PLAYER_ART: Record<PlayerPose,readonly [string,string]> = {
   reel:['p001-player-reel1-pixel-v2.webp','p001-player-reel2-pixel-v2.webp'],
   surprise:['p001-player-surprise1-pixel-v2.webp','p001-player-surprise2-pixel-v2.webp'],
 };
+export const WORLD_PLAYER_ART:{idle:string;walk?:string;hold?:string}={idle:'p001-player-idle-hd2d-v1.webp'};
 export function guestPicture(id:GuestId,outfit:Outfit,kind:'portrait'|'chibi'):string|undefined {
   return GUEST_ART[id]?.[outfit][kind];
 }
 export function visualIllustrations():string[] {
   return [...Object.values(GUEST_ART).flatMap(outfits=>Object.values(outfits).flatMap(item=>[item.portrait,item.chibi])),
-    ...Object.values(DECOR_ART),...Object.values(BAIT_ART),...Object.values(PLAYER_ART).flat()];
+    ...Object.values(DECOR_ART),...Object.values(BAIT_ART),...Object.values(PLAYER_ART).flat(),...Object.values(WORLD_PLAYER_ART)];
 }

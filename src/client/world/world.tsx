@@ -3,12 +3,15 @@ import type {WorldProps} from './contracts.ts';
 import {CoastWorld} from './renderer.ts';
 import type {WorldState} from './renderer.ts';
 import {PLACES} from './map.ts';
+import {createCoastIcon} from '../coast-icons.tsx';
 
 export function createWorld(React:typeof ReactTypes){
+  const Icon=createCoastIcon(React);
   return function World(props:WorldProps){
     const canvas=React.useRef<HTMLCanvasElement>(null),host=React.useRef<CoastWorld>(),latest=React.useRef(props);latest.current=props;
     const [state,setState]=React.useState<WorldState>({near:null,walking:false,destination:null,spot:'pier',ready:false});
     const [error,setError]=React.useState(false),[attempt,setAttempt]=React.useState(0),[knob,setKnob]=React.useState({x:0,y:0});
+    const [navigation,setNavigation]=React.useState(false);
     const drag=React.useRef<number|null>(null),keys=React.useRef(new Set<string>());
     const locked=props.blocked||!!props.data.active||!!props.data.pending||props.data.autoFishing.enabled||props.overlay;
     const reset=()=>{keys.current.clear();drag.current=null;setKnob({x:0,y:0});host.current?.setInput(0,0);};
@@ -18,8 +21,8 @@ export function createWorld(React:typeof ReactTypes){
       const timer=setTimeout(()=>{
         if(disposed||!canvas.current)return;
         try{runtime=new CoastWorld(canvas.current,latest.current,value=>{if(!disposed)setState(value);},()=>{if(!disposed)setError(true);});host.current=runtime;
-          void runtime.prepare().catch(()=>{runtime?.dispose();if(!disposed)setError(true);});
-        }catch{runtime?.dispose();if(!disposed)setError(true);}
+          void runtime.prepare().catch(error=>{if(canvas.current)canvas.current.dataset.loadError=error instanceof Error?error.message:'Scene preparation failed';runtime?.dispose();if(!disposed)setError(true);});
+        }catch(error){if(canvas.current)canvas.current.dataset.loadError=error instanceof Error?error.message:'Scene initialization failed';runtime?.dispose();if(!disposed)setError(true);}
       },0);
       return ()=>{disposed=true;clearTimeout(timer);runtime?.dispose();host.current=undefined;};
     },[props.data.saveId,attempt]);
@@ -40,13 +43,13 @@ export function createWorld(React:typeof ReactTypes){
     const fish=()=>{if(host.current?.dock())props.onFish();};
     return <div className="dsh-fisher-world" onKeyDown={event=>key(event,true)} onKeyUp={event=>key(event,false)} onBlur={event=>{if(!event.currentTarget.contains(event.relatedTarget))reset();}}>
       <canvas key={attempt} ref={canvas} tabIndex={0} role="img" aria-label="可以走动的摸鱼塘海岸，使用摇杆或方向键移动" onPointerDown={event=>event.currentTarget.focus()} data-render-state="loading"/>
-      <div className="dsh-fisher-world-title"><span>摸鱼塘 · 海岸漫步</span><small>{state.destination?`正在前往${PLACES[state.destination].name}`:props.data.autoFishing.enabled?'托管在岸边':props.data.active?'这一竿，慢慢来':'风从海面吹过来'}</small></div>
       {!locked&&state.ready&&!error&&<><div className="dsh-fisher-world-waypoints" aria-label="海岸导航">
-        <button onClick={()=>host.current?.go('pier')}>木栈桥</button><button onClick={()=>host.current?.go('cove')}>浅湾</button>{props.data.life.visitor&&<button onClick={()=>host.current?.go('guest')}>来客</button>}
+        {navigation&&<div className="dsh-fisher-world-destinations">{(['pier','cove','guest'] as const).filter(id=>id!=='guest'||props.data.life.visitor).map(id=><button key={id} onClick={()=>{host.current?.go(id);setNavigation(false);}}>{PLACES[id].name}</button>)}</div>}
+        <button className="dsh-fisher-navigation-button" aria-expanded={navigation} onClick={()=>setNavigation(value=>!value)}><Icon name="compass"/><span>{state.destination?`前往${PLACES[state.destination].name}`:'去哪里'}</span></button>
       </div><div className="dsh-fisher-joystick-wrap"><button className="dsh-fisher-joystick" aria-label="移动摇杆" title="鼠标按住拖动，也可用方向键或 WASD"
         onPointerDown={event=>{if(!event.isPrimary||event.button!==0)return;drag.current=event.pointerId;event.currentTarget.setPointerCapture(event.pointerId);event.currentTarget.focus();pointer(event);}}
-        onPointerMove={pointer} onPointerUp={finish} onPointerCancel={finish} onLostPointerCapture={finish}><span style={{transform:`translate(${knob.x}px,${knob.y}px)`}}/><i aria-hidden="true">＋</i></button><small>拖动摇杆 · 走向海边</small></div>
-        <div className="dsh-fisher-world-interaction" aria-live="polite">{state.near==='guest'?<><small>岸边来客</small><button className="dsh-fisher-primary" onClick={props.onGuest}>交谈</button></>:state.near?<><small>{PLACES[state.near].name}</small><button className="dsh-fisher-primary" onClick={fish}>在这里钓鱼</button><button onClick={props.onGear}>整理装备</button></>:<span>靠近钓点或来客<br/>就能展开互动</span>}</div>
+        onPointerMove={pointer} onPointerUp={finish} onPointerCancel={finish} onLostPointerCapture={finish}><span style={{transform:`translate(${knob.x}px,${knob.y}px)`}}/><i aria-hidden="true">＋</i></button></div>
+        <div className="dsh-fisher-world-interaction" aria-live="polite">{state.near==='guest'?<button className="dsh-fisher-primary" onClick={props.onGuest}><Icon name="note"/><span>交谈</span></button>:state.near?<button className="dsh-fisher-primary" onClick={fish}><Icon name="fish"/><span>在这里钓鱼</span><small>{PLACES[state.near].name}</small></button>:null}</div>
       </>}
       {(!state.ready||error)&&<div className="dsh-fisher-world-loading" role="status"><span className="dsh-fisher-world-loading-mark">≈</span><strong>{error?'海岸暂时没有展开':'正在准备海岸'}</strong><small>{error?'可以重试，或使用轻量画面继续。':'整理小屋、码头与光线…'}</small>{error&&<><button onClick={()=>setAttempt(v=>v+1)}>重新展开</button><button onClick={props.onFallback}>使用轻量画面</button></>}</div>}
     </div>;

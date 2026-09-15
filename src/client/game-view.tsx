@@ -20,6 +20,7 @@ import { createDialog } from './dialog.tsx';
 import { CoastSound } from './sound.ts';
 import { createInventoryView } from './inventory-view.tsx';
 import { createAutoFishingView } from './auto-fishing-view.tsx';
+import { createCoastIcon } from './coast-icons.tsx';
 
 export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentType<GameProps> {
   const Scene = createScene(React);
@@ -28,6 +29,7 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
   const CardButton = createCardButton(React);
   const Dialog = createDialog(React);
   const Automatic=createAutoFishingView(React);
+  const Icon=createCoastIcon(React);
   const releaseLabel=(item:Catch)=>species(item.speciesId).creature?'放流':'回收';
   const measurements=(item:Catch)=>item.lengthMm===null?'海岸纪念':`${(item.lengthMm/10).toFixed(1)} cm · ${item.weightG} g`;
   function FishArt({ id, variant='original', large = false }: { id: SpeciesId; variant?:Variant|null; large?: boolean }) {
@@ -50,7 +52,7 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
   const Catalog = createCatalogView(React,FishArt);
   const Inventory = createInventoryView(React,FishArt);
 
-  return function Game({ lowPerformance,reducedMotion=false,sound=false,volume=.35,onEnabledChange }: GameProps) {
+  return function Game({ lowPerformance,reducedMotion=false,sound=false,volume=.35,obscured=false,onEnabledChange }: GameProps) {
     const [controller] = React.useState(() => new GameController(onEnabledChange));
     const [audio]=React.useState(()=>new CoastSound());
     const lastSound=React.useRef({cast:'',pending:'',phase:'',outcome:'',coins:0,error:''});
@@ -66,11 +68,12 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
     const [worldFallback,setWorldFallback]=React.useState(false);
     const [prepareFishing,setPrepareFishing]=React.useState(false);
     const [talk,setTalk]=React.useState(false);
+    const [panel,setPanel]=React.useState<'automatic'|'status'|'fishing'|null>(null);
     const root = React.useRef<HTMLDivElement>(null);
     React.useEffect(() => {
       const outside = (event: Event) => {
         const target = event.target;
-        if (target instanceof Node && (event.type === 'pointerdown' || target !== document.body) && !root.current?.contains(target)) controller.pause();
+        if (target instanceof Node && (event.type === 'pointerdown' || target !== document.body) && !root.current?.closest('.dsh-fisher-panel')?.contains(target)) controller.pause();
       };
       controller.start();
       document.addEventListener('pointerdown', outside, true);
@@ -81,15 +84,17 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
         controller.dispose();
       };
     }, [controller]);
+    React.useEffect(()=>{if(obscured)controller.pause();},[controller,obscured]);
     const data = view.data;
     const cast = data?.active;
     const sim = view.sim;
     const phase = sim?.phase;
     const pending = data?.pending;
     const automatic=cast?.automatic;
+    React.useEffect(()=>{if(cast&&!automatic)setPanel(value=>value==='automatic'?null:value);},[cast?.id,!!automatic]);
     const worldMode=data?.journey.region==='L01'&&!worldFallback;
     React.useEffect(()=>{if(cast||data?.autoFishing.enabled||tab!=='fishing')setPrepareFishing(false);},[cast?.id,data?.autoFishing.enabled,tab]);
-    React.useEffect(()=>{setTalk(false);setPrepareFishing(false);setWorldFallback(false);},[data?.saveId]);
+    React.useEffect(()=>{setTalk(false);setPrepareFishing(false);setWorldFallback(false);setPanel(null);},[data?.saveId]);
     React.useEffect(()=>setAutoHistory(false),[data?.saveId]);
     React.useEffect(()=>{
       if(!data)return;
@@ -113,6 +118,17 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
     };
     const reelUp = () => { if (!toggle) controller.setReel(false); };
     const changeTab = (next: typeof tab) => { controller.pause();if(next!==tab)audio.play('page'); setTab(next); setConfirm(null); setCancelConfirm(false); root.current?.closest('.dsh-fisher-body')?.scrollTo({top:0}); };
+    const openPanel=(next:typeof panel)=>{controller.pause();setPanel(next);};
+    const overlay=obscured||tab!=='fishing'||!!panel||!!confirm||cancelConfirm||!!pending||!!view.reward||autoHistory||!!data&&data.autoFishing.caught>data.autoFishing.seen||prepareFishing||talk;
+    const reelButton=(compact=false)=><button disabled={blocked} className={`dsh-fisher-primary dsh-fisher-reel${view.reel?' is-reeling':''}`} aria-pressed={view.reel}
+      onPointerDown={event=>{if(event.button!==0)return;event.currentTarget.setPointerCapture(event.pointerId);if(!toggle)controller.setReel(true);}}
+      onPointerUp={reelUp} onPointerCancel={()=>controller.setReel(false)} onLostPointerCapture={reelUp}
+      onKeyDown={event=>{if(!toggle&&['Space','Enter'].includes(event.code)){event.preventDefault();if(!event.repeat)controller.setReel(true);}}}
+      onKeyUp={event=>{if(!toggle&&['Space','Enter'].includes(event.code)){event.preventDefault();controller.setReel(false);}}}
+      onBlur={()=>controller.setReel(false)} onClick={()=>{if(toggle)controller.setReel(!view.reel);}}>
+      {compact&&<Icon name="fish"/>}<span>{view.reel?'收线中':toggle?'点击收线':'按住收线'}</span>
+      {compact&&sim&&<><small>收线 {Math.round(sim.progress/10000)}% · 张力 {Math.round(sim.tension/10000)}%</small><i className="dsh-fisher-hud-meter" style={{'--catch':`${Math.min(100,sim.progress/10000)}%`,'--tension':`${Math.min(100,sim.tension/10000)}%`} as ReactTypes.CSSProperties}/></>}
+    </button>;
     const mood = pending ? '今天的海，回了一封信' : automatic ? data?.autoFishing.enabled&&data.autoFishing.working?'你忙你的，海岸慢慢钓':'这份等待，下次接着来' : view.paused && cast ? '这一竿，等你回来' : phase === 'bite' ? '浮漂动了 · 现在提竿'
       : phase === 'fighting' ? warning(sim!, cast!.challenge) : phase === 'casting' ? '轻轻把线送出去' : phase === 'waiting' ? '等一阵涟漪' : '留一点时间给风，也给自己。';
     const visitor=data?.life.visitor?guest(data.life.visitor):null;
@@ -125,19 +141,13 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
             {phase === 'fighting' && <><Meter label="收线进度" value={sim!.progress} /><Meter label="鱼线张力" value={sim!.tension} danger />
               <div className="dsh-fisher-danger" data-danger={sim!.danger > 0}>断线风险 <b>{Math.round(sim!.danger / 3000)}%</b><span>高张力时松开</span></div></>}
             {phase==='recovery'?<><p>这一竿的等待超出了预期，收获已经保留，可以安全收回。</p><button className="dsh-fisher-primary" disabled={blocked} onClick={()=>void controller.action({type:'cast.recover',castId:cast.id,ownerEpoch:cast.ownerEpoch})}>恢复这份收获</button></>:view.paused ? <><p>关闭窗口或离开页面会暂停。回来后接着钓。</p>
-              <button className="dsh-fisher-primary" disabled={blocked} onClick={() => void controller.action({ type: 'cast.resume', castId: cast.id })}>
+              <button className="dsh-fisher-primary" disabled={blocked} onClick={() => {setPanel(null);void controller.action({ type: 'cast.resume', castId: cast.id });}}>
                 {cast.owner === controller.clientId ? '继续这一竿' : '在这里继续这一竿'}</button></>
               : phase === 'bite' ? <button className="dsh-fisher-primary" disabled={blocked} onClick={() => void controller.hook()}>提竿</button>
                 : phase === 'fighting' ? <>
-                  <button className={`dsh-fisher-primary dsh-fisher-reel${view.reel ? ' is-reeling' : ''}`} aria-pressed={view.reel}
-                    onPointerDown={event => { if (event.button !== 0) return; event.currentTarget.setPointerCapture(event.pointerId); if (!toggle) controller.setReel(true); }}
-                    onPointerUp={reelUp} onPointerCancel={() => controller.setReel(false)} onLostPointerCapture={reelUp}
-                    onKeyDown={event => { if (!toggle && (event.code === 'Space' || event.code === 'Enter')) { event.preventDefault(); if (!event.repeat) controller.setReel(true); } }}
-                    onKeyUp={event => { if (!toggle && (event.code === 'Space' || event.code === 'Enter')) { event.preventDefault(); controller.setReel(false); } }}
-                    onBlur={() => controller.setReel(false)} onClick={() => { if (toggle) controller.setReel(!view.reel); }}>
-                    {view.reel ? '收线中 · 松开缓一缓' : toggle ? '点击开始收线' : '按住收线'}</button>
-                  <label className="dsh-fisher-toggle"><input type="checkbox" checked={toggle} onChange={event => { controller.setReel(false); setToggle(event.target.checked); }} />点击切换收线 <span>也可在按钮上按住空格</span></label>
+                  {reelButton()}
                 </> : <p className="dsh-fisher-wait-copy">浮漂会提醒你，慢慢等就好。</p>}
+            {phase==='fighting'&&<label className="dsh-fisher-toggle"><input type="checkbox" checked={toggle} onChange={event=>{controller.setReel(false);setToggle(event.target.checked);}}/>点击切换收线 <span>也可在按钮上按住空格</span></label>}
             <div className="dsh-fisher-quiet-actions">{!view.paused && <button disabled={view.busy} onClick={() => controller.pause()}>歇一会儿</button>}
               <button disabled={blocked || cast.owner !== controller.clientId||phase==='recovery'} onClick={() => { controller.pause(); setCancelConfirm(true); }}>收起这一竿</button></div>
           </> : <><div className="dsh-fisher-play-heading"><h3>{data?.lastOutcome === 'escaped' ? '鱼回到水里了' : '在这里，慢一点也很好'}</h3><small>{gear(data?.journey.loadout.rod??'D01').name}</small></div>
@@ -145,39 +155,42 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
             <label className="dsh-fisher-toggle"><input type="checkbox" checked={mode === 'assisted'} disabled={blocked} onChange={event => setMode(event.target.checked ? 'assisted' : 'standard')} />辅助松线 <span>张力高时帮你松线</span></label>
             <button className="dsh-fisher-primary" disabled={blocked} onClick={() => void controller.action({ type: 'cast.begin', mode })}>抛竿</button><div className="dsh-fisher-quiet-actions"><button onClick={()=>changeTab('harbor')}>换钓点 · 整理装备</button></div></>}
         </section>);
-    return <div className="dsh-fisher-game" data-world={worldMode&&tab==='fishing'} ref={root} onPointerDown={()=>audio.activate()} onChangeCapture={event=>{const target=event.target;if(target instanceof HTMLSelectElement||target instanceof HTMLInputElement&&['checkbox','radio'].includes(target.type))audio.play('select');}} onKeyDown={event=>{audio.activate();if(event.key==='Escape'){event.stopPropagation();controller.pause();}}}>
-      <div className="dsh-fisher-location"><div><small>海岸手记 · Lv.{levelInfo(data?.experience??0).level}</small><h2>{location.name}</h2></div>
-        <div className="dsh-fisher-wallet"><span title="壳币">壳币 <b>{data?.coins ?? '—'}</b></span><small>潮汐碎片 {data?.tokens ?? '—'} · 研究 {data?.research ?? '—'}</small></div></div>
-      <nav className="dsh-fisher-tabs" aria-label="海岸页面">
-        <button aria-current={tab === 'fishing' ? 'page' : undefined} onClick={() => changeTab('fishing')}>钓鱼</button>
-        <button aria-current={tab === 'catalog' ? 'page' : undefined} onClick={() => changeTab('catalog')}>图鉴 <small>{Object.keys(data?.catalog ?? {}).length}/{SPECIES.length}</small></button>
-        <button aria-current={tab === 'inventory' ? 'page' : undefined} onClick={() => changeTab('inventory')}>背包 <small>{data?.inventory.length ?? 0}</small></button>
-        <button aria-current={tab === 'harbor' ? 'page' : undefined} onClick={() => changeTab('harbor')}>码头</button>
-        <button aria-current={tab === 'life' ? 'page' : undefined} onClick={() => changeTab('life')}>手记</button>
-      </nav>
-      {!view.connected&&<p className="dsh-fisher-empty">海岸正在等待连接，进度已暂停。</p>}
-      {view.connected&&tab === 'fishing' && <>
+    return <div className="dsh-fisher-game" data-immersive="true" data-world={worldMode} ref={root} onPointerDown={()=>audio.activate()} onChangeCapture={event=>{const target=event.target;if(target instanceof HTMLSelectElement||target instanceof HTMLInputElement&&['checkbox','radio'].includes(target.type))audio.play('select');}} onKeyDown={event=>{audio.activate();if(event.key==='Escape'){event.stopPropagation();controller.pause();}}}>
+      {data&&<>
         {worldMode&&data?<div className="dsh-fisher-world-stage" data-fishing={!!cast||data.autoFishing.enabled}><World data={data} lowPerformance={lowPerformance} reducedMotion={reducedMotion} blocked={blocked}
           pose={pending?'surprise':phase==='casting'?'cast':phase==='fighting'&&view.reel?'reel':cast?'hold':'idle'}
           paused={automatic?!data.autoFishing.working:!!cast&&view.paused}
-          overlay={!!confirm||cancelConfirm||!!pending||!!view.reward||autoHistory||data.autoFishing.caught>data.autoFishing.seen||prepareFishing||talk}
+          overlay={overlay}
           onFish={()=>setPrepareFishing(true)} onGuest={()=>setTalk(true)} onGear={()=>changeTab('harbor')} onFallback={()=>setWorldFallback(true)}/></div>:<div className={`dsh-fisher-scene dsh-fisher-play-scene${phase === 'fighting' && !view.paused ? ' is-fighting' : ''}`}>
-          <Scene lowPerformance={lowPerformance} reducedMotion={reducedMotion} data={data} pose={pending?'surprise':phase==='casting'?'cast':phase==='fighting'&&view.reel?'reel':cast?'hold':'idle'} paused={(automatic?!data?.autoFishing.working:!!cast&&view.paused) || !view.connected || !!confirm || cancelConfirm || !!pending || !!view.reward} />
-          <div className="dsh-fisher-scene-label"><span>{cast?.setup?TIDE_NAMES[cast.setup.tide]:data?TIDE_NAMES[currentTide(data.journey)]:'平潮'} · 风轻</span><b>{location.id.slice(1)} / SHORE</b></div>
+          <Scene lowPerformance={lowPerformance} reducedMotion={reducedMotion} data={data} pose={pending?'surprise':phase==='casting'?'cast':phase==='fighting'&&view.reel?'reel':cast?'hold':'idle'} paused={overlay||(automatic?!data?.autoFishing.working:!!cast&&view.paused)||!view.connected} />
           {cast && !pending && <div className="dsh-fisher-float" data-phase={(automatic?!data?.autoFishing.working:view.paused) ? 'paused' : phase} data-glow={data!.journey.loadout.float==='U03'&&['L03','L04'].includes(location.id)} aria-hidden="true">{GEAR_ART[data!.journey.loadout.float]?(<img src={`${API}/assets/${thumbnailAsset(GEAR_ART[data!.journey.loadout.float]!)}`} alt=""/>):<i/>}<b /></div>}
           {pending?.isRecord&&data!.journey.loadout.float==='U04'&&<span className="dsh-fisher-record-flag">新纪录</span>}
-          <div className="dsh-fisher-note" role="status">{mood}</div>
         </div>}
-        {(!worldMode||cast||data?.autoFishing.enabled)&&fishingPanel}
-        {worldMode&&data&&!cast&&!data.autoFishing.enabled&&<div className="dsh-fisher-world-toolbar"><Automatic.Controls data={data} controller={controller} disabled={blocked} onHistory={()=>setAutoHistory(true)}/></div>}
-        {!worldMode&&visitor&&<aside className="dsh-fisher-visitor" aria-label="岸边来客"><b>{visitor.name}</b><p>{visitorLine}</p><button onClick={()=>changeTab('life')}>翻开来客手记</button></aside>}
       </>}
-      {worldMode&&prepareFishing&&!cast&&!data?.autoFishing.enabled&&<Dialog title="这一竿的准备" onClose={()=>setPrepareFishing(false)} busy={view.busy} closeLabel="回到岸边">{fishingPanel}</Dialog>}
-      {worldMode&&talk&&visitor&&<Dialog title={visitor.name} onClose={()=>setTalk(false)} closeLabel="继续散步"><p>{visitorLine}</p><button onClick={()=>{setTalk(false);changeTab('life');}}>翻开来客手记</button></Dialog>}
-      {view.connected&&tab==='harbor'&&data&&<Harbor data={data} controller={controller} blocked={blocked} lowPerformance={lowPerformance} reducedMotion={reducedMotion} storageBusy={view.busy||view.retryPending}/>}
-      {view.connected&&tab==='life'&&data&&<LifeView data={data} controller={controller} blocked={blocked} reducedMotion={reducedMotion} lowPerformance={lowPerformance} onFish={()=>changeTab('fishing')}/>}
-      {view.connected&&tab==='catalog'&&data&&<Catalog data={data} controller={controller} blocked={blocked} onFish={()=>changeTab('fishing')}/>}
-      {view.connected&&tab==='inventory'&&data&&<Inventory data={data} controller={controller} blocked={blocked} onFish={()=>changeTab('fishing')} onResolve={(item,choice)=>resolve(item,'inventory',choice)}/>}
+      <div className="dsh-fisher-hud-top"><button className="dsh-fisher-hud-location" title={`${location.name} · ${data?TIDE_NAMES[currentTide(data.journey)]:'平潮'}`} onClick={()=>changeTab('harbor')} aria-haspopup="dialog"><Icon name="compass"/><span>{location.name}</span></button><button className="dsh-fisher-hud-wallet" onClick={()=>openPanel('status')} aria-label={`海岸状态，${data?.coins??0} 壳币`} aria-haspopup="dialog"><Icon name="coin"/>{data?.coins??'—'}</button></div>
+      <nav className="dsh-fisher-hud-menu" aria-label="海岸功能">
+        <button aria-haspopup="dialog" title={`图鉴 ${Object.keys(data?.catalog??{}).length}/${SPECIES.length}`} onClick={()=>changeTab('catalog')}><Icon name="book"/><span>图鉴</span></button>
+        <button aria-haspopup="dialog" title={`背包 ${data?.inventory.length??0}`} onClick={()=>changeTab('inventory')}><Icon name="bag"/><span>背包</span></button>
+        <button aria-haspopup="dialog" onClick={()=>changeTab('harbor')}><Icon name="harbor"/><span>码头</span></button>
+        <button aria-haspopup="dialog" onClick={()=>changeTab('life')}><Icon name="note"/><span>手记</span></button>
+        <button aria-haspopup="dialog" aria-label="自动钓鱼设置" data-active={data?.autoFishing.enabled} onClick={()=>openPanel('automatic')}><Icon name="auto"/><span>{data?.autoFishing.enabled?'托管中':'托管'}</span></button>
+      </nav>
+      <button className="dsh-fisher-hud-save" data-error={!!view.error||!view.connected} aria-haspopup="dialog" onClick={()=>openPanel('status')} title={view.error??(view.busy?'正在保存…':'进度已保存在本机')}><Icon name="save"/><span>{view.error?'保存提示':!view.connected?'正在连接':view.busy?'保存中':'存档'}</span></button>
+      {!overlay&&data&&<div className="dsh-fisher-hud-fishing" aria-label="岸边钓鱼操作">
+        {automatic||!cast&&data.autoFishing.enabled?<button onClick={()=>openPanel('automatic')} className="dsh-fisher-primary"><Icon name="auto"/><span>{data.autoFishing.working?'正在自动钓鱼':'托管等待中'}</span></button>:cast?<>
+          {phase==='recovery'?<button className="dsh-fisher-primary" disabled={blocked} onClick={()=>void controller.action({type:'cast.recover',castId:cast.id,ownerEpoch:cast.ownerEpoch})}>恢复收获</button>:view.paused?<button className="dsh-fisher-primary" disabled={blocked} onClick={()=>void controller.action({type:'cast.resume',castId:cast.id})}><Icon name="fish"/><span>继续这一竿</span></button>:phase==='bite'?<button className="dsh-fisher-primary is-biting" disabled={blocked} onClick={()=>void controller.hook()}><Icon name="fish"/><span>提竿！</span></button>:phase==='fighting'?reelButton(true):<button className="dsh-fisher-primary" onClick={()=>openPanel('fishing')} title={mood}><Icon name="fish"/><span>等鱼来信</span></button>}
+          <button className="dsh-fisher-hud-more" onClick={()=>openPanel('fishing')} aria-label="钓鱼操作选项" aria-haspopup="dialog"><Icon name="more"/></button>
+        </>:!worldMode?<button className="dsh-fisher-primary" disabled={blocked} onClick={()=>setPrepareFishing(true)}><Icon name="fish"/><span>准备钓鱼</span></button>:null}
+      </div>}
+      {!obscured&&<>
+      {prepareFishing&&!cast&&!data?.autoFishing.enabled&&<Dialog title="这一竿的准备" onClose={()=>setPrepareFishing(false)} busy={view.busy} closeLabel="回到岸边">{fishingPanel}</Dialog>}
+      {talk&&visitor&&<Dialog title={visitor.name} onClose={()=>setTalk(false)} closeLabel="继续散步"><p>{visitorLine}</p><button onClick={()=>{setTalk(false);changeTab('life');}}>翻开来客手记</button></Dialog>}
+      {panel==='fishing'&&<Dialog title="钓鱼操作" onClose={()=>setPanel(null)} closeLabel="回到岸边">{fishingPanel}</Dialog>}
+      {panel==='automatic'&&data&&<Dialog title="随 DSH 自动钓鱼" onClose={()=>setPanel(null)} closeLabel="回到岸边"><Automatic.Controls data={data} controller={controller} disabled={blocked} onHistory={()=>setAutoHistory(true)}/><Automatic.Progress data={data} controller={controller} disabled={blocked} onCancel={()=>setCancelConfirm(true)} onHarbor={()=>{setPanel(null);changeTab('harbor');}}/></Dialog>}
+      {panel==='status'&&<Dialog title="海岸状态" onClose={()=>setPanel(null)}><div className="dsh-fisher-stat-grid"><div><strong>{levelInfo(data?.experience??0).level}</strong><span>海岸等级</span></div><div><strong>{data?.coins??'—'}</strong><span>壳币</span></div><div><strong>{data?.tokens??'—'}</strong><span>潮汐碎片</span></div><div><strong>{data?.research??'—'}</strong><span>研究</span></div></div><p role="status">{view.error??(!view.connected?'海岸正在等待连接，进度已暂停。':view.busy?'正在保存…':'进度已保存在本机。')}</p>{(view.error||!view.connected)&&<button disabled={view.busy} onClick={()=>void controller.retry()}>{view.retryPending?'重试保存':'重新连接'}</button>}{data?.journey.overflow&&<p>有货币达到持有上限，超出部分未计入。</p>}</Dialog>}
+      {tab!=='fishing'&&<Dialog title={{catalog:'海岸图鉴',inventory:'我的背包',harbor:'码头',life:'海岸手记'}[tab]} onClose={()=>changeTab('fishing')} closeLabel="回到海岸" className="dsh-fisher-page-dialog">
+        {!data?<p>正在连接海岸…</p>:tab==='harbor'?<Harbor data={data} controller={controller} blocked={blocked} lowPerformance={lowPerformance} reducedMotion={reducedMotion} storageBusy={view.busy||view.retryPending}/>:tab==='life'?<LifeView data={data} controller={controller} blocked={blocked} reducedMotion={reducedMotion} lowPerformance={lowPerformance} onFish={()=>changeTab('fishing')}/>:tab==='catalog'?<Catalog data={data} controller={controller} blocked={blocked} onFish={()=>changeTab('fishing')}/>:<Inventory data={data} controller={controller} blocked={blocked} onFish={()=>changeTab('fishing')} onResolve={(item,choice)=>resolve(item,'inventory',choice)}/>}
+      </Dialog>}
       {view.connected&&pending&&data&&<Dialog key={pending.id} title={`${pending.isNew?'新发现':pending.isRecord?'新纪录':'有收获了'} · ${species(pending.speciesId).name}`} className="dsh-fisher-catch-dialog" busy={view.busy} closeDisabled={blocked||(isInventorySpecies(pending.speciesId)&&data.inventory.length>=240)} closeLabel={isInventorySpecies(pending.speciesId)?'留下并继续':'继续'} hint={isInventorySpecies(pending.speciesId)?data.inventory.length>=240?'背包已满，请选择出售或放流／回收。':'点击空白处继续，收获会放入背包。':'点击空白处继续。'} onClose={()=>{if(!blocked&&(!isInventorySpecies(pending.speciesId)||data.inventory.length<240))resolve(pending,'catch','keep');}}>
         <div className="dsh-fisher-catch-heading"><FishArt id={pending.speciesId} variant={pending.variant} large/></div>
         <div className="dsh-fisher-catch-stats"><span>{measurements(pending)}</span>{pending.variant&&<span>{sizeLabel(pending.quality)} · {VARIANT_NAMES[pending.variant]}</span>}{pending.price>0&&<span>{pending.price} 壳币</span>}</div>
@@ -195,11 +208,7 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
       {cancelConfirm && cast && <Dialog title="收起这一竿" onClose={()=>setCancelConfirm(false)} busy={view.busy}><p>收起后这一竿会结束。普通消耗饵不退回；定向饵和来客邀请会保留，潮相覆盖次数不退回。</p><div className="dsh-fisher-actions">
         <button disabled={blocked} onClick={() => { void controller.action({ type: 'cast.cancel', castId: cast.id, ownerEpoch: cast.ownerEpoch }); setCancelConfirm(false); }}>确认收竿</button>
         </div></Dialog>}
-      <div className="dsh-fisher-connection" data-state={view.error ? 'error' : 'ready'} role="status"><span><span className="dsh-fisher-dot" />
-        {view.error ?? (view.busy ? '正在保存…' : data ? '进度已保存在本机' : '正在连接海岸…')}</span>
-        {(view.error || !view.connected) && <button disabled={view.busy} onClick={() => void controller.retry()}>{view.retryPending || data?.issue?.startsWith('保存没有完成') ? '重试保存' : '重新连接'}</button>}
-      </div>
-      {data?.journey.overflow&&<p className="dsh-fisher-overflow" role="status">有货币达到持有上限，超出部分未计入。</p>}
+      </>}
     </div>;
   };
 }

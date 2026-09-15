@@ -8,13 +8,24 @@ export const PLACES={
   guest:{x:.1,z:1.1,name:'岸边来客',radius:1.1},
 } as const;
 export const TREES=[[-4.8,1.1,1.1],[-4.7,-3.9,1.2],[4.6,1.6,1.05],[4.5,-4,1.25],[.5,-3.8,1.15]] as const;
+export const COASTLINE=[[-5.6,-4.55],[-2.1,-4.95],[2.9,-4.7],[5.4,-3.9],[5.6,-1.15],[5.25,2.9],[4.4,3.8],[3,4.05],[1,3.8],[-1.5,3.95],[-3.95,3.7],[-5.4,2.8],[-5.65,.2]] as const;
+export const POND={x:-2.85,z:.65,rx:1.3,rz:.9};
 const RADIUS=.23;
-const ground=(x:number,z:number)=>(x>=-5.6&&x<=5.6&&z>=-4.8&&z<=3.8)||(x>=1.05&&x<=2.95&&z>=3.5&&z<=7);
+const ground=(x:number,z:number)=>{
+  if(x>=1.05&&x<=2.95&&z>=3.5&&z<=7)return true;
+  let inside=false;
+  for(let i=0,j=COASTLINE.length-1;i<COASTLINE.length;j=i++){
+    const a=COASTLINE[i]!,b=COASTLINE[j]!;
+    if((a[1]>z)!==(b[1]>z)&&x<(b[0]-a[0])*(z-a[1])/(b[1]-a[1])+a[0])inside=!inside;
+  }
+  return inside;
+};
 export function walkable(point:Point):boolean {
   if(!Number.isFinite(point.x)||!Number.isFinite(point.z))return false;
   for(const [x,z] of [[0,0],[1,0],[-1,0],[0,1],[0,-1],[.7,.7],[-.7,.7],[.7,-.7],[-.7,-.7]])if(!ground(point.x+x!*RADIUS,point.z+z!*RADIUS))return false;
   if(point.x>-4.4-RADIUS&&point.x<-1.4+RADIUS&&point.z>-4.05-RADIUS&&point.z<-1.6+RADIUS)return false;
   if(point.x>2.25-RADIUS&&point.x<3.9+RADIUS&&point.z>-3.9-RADIUS&&point.z<-2.45+RADIUS)return false;
+  if(((point.x-POND.x)/(POND.rx+RADIUS))**2+((point.z-POND.z)/(POND.rz+RADIUS))**2<1)return false;
   return !TREES.some(([x,z])=>Math.hypot(point.x-x,point.z-z)<.42+RADIUS);
 }
 export function screenDirection(x:number,y:number):Point {

@@ -13,6 +13,7 @@ import { styles } from './client/styles.ts';
 import { createPluginStore } from './client/plugin-store.ts';
 import type { PluginStore } from './client/plugin-store.ts';
 import { LauncherArt } from './client/launcher-art.tsx';
+import {configureDialogs,createDialog} from './client/dialog.tsx';
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap { 'dsh-fisher': 'title'; }
@@ -41,6 +42,7 @@ class GameBoundary extends React.Component<{ children: React.ReactNode; retry: (
 }
 
 function createComponents(store: WindowStore,plugin:PluginStore) {
+  configureDialogs(createPortal);const Dialog=createDialog(React);
   const useWindow = () => React.useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const usePlugin=()=>React.useSyncExternalStore(plugin.subscribe,plugin.getSnapshot,plugin.getSnapshot);
   let pending: Promise<{ default: React.ComponentType<GameProps> }> | undefined;
@@ -76,6 +78,7 @@ function createComponents(store: WindowStore,plugin:PluginStore) {
     };
     const [attempt, setAttempt] = React.useState(0);
     const [settingsOpen,setSettingsOpen]=React.useState(false);
+    React.useEffect(()=>{if(!view.open)setSettingsOpen(false);},[view.open]);
     const Game = React.useMemo(() => React.lazy(loadGame), [attempt]);
     const gesture = React.useRef<{ mode: 'move' | 'resize'; pointerId: number; x: number; y: number;
       startX: number; startY: number; width: number; height: number }>();
@@ -108,7 +111,7 @@ function createComponents(store: WindowStore,plugin:PluginStore) {
           onKeyDown={event=>{const steps:Record<string,[number,number]>={ArrowLeft:[-10,0],ArrowRight:[10,0],ArrowUp:[0,-10],ArrowDown:[0,10]};const step=steps[event.key];if(step){event.preventDefault();event.stopPropagation();store.set({launcherX:view.launcherX+step[0],launcherY:view.launcherY+step[1]},true);}}}
           onClick={event => {if(ignoreClick.current&&event.detail!==0){ignoreClick.current=false;return;}store.set({ open: !view.open });}}><LauncherArt status={preference.launcher}/></button>
       </div>}
-      {preference.enabled&&view.open && <section className="dsh-fisher dsh-fisher-panel" aria-label="摸鱼海岸" role="region" data-theme={view.theme} data-reduced-motion={view.reducedMotion}
+      {preference.enabled&&view.open && <section className="dsh-fisher dsh-fisher-panel" aria-label="摸鱼海岸" role="region" data-immersive="true" data-theme={view.theme} data-reduced-motion={view.reducedMotion}
         style={{ ...appearance(view), left: view.x, top: view.y, width: view.width, height: view.height }}
         onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); if(settingsOpen)setSettingsOpen(false);else close(); } }}>
         <header className="dsh-fisher-header" onPointerDown={event => start('move', event)} onPointerMove={move}
@@ -121,11 +124,12 @@ function createComponents(store: WindowStore,plugin:PluginStore) {
           <button className="dsh-fisher-icon" onClick={close} aria-label="收起摸鱼海岸">×</button></div>
         </header>
         <div className="dsh-fisher-body">
-          {settingsOpen?<Settings/>:<GameBoundary key={attempt} retry={() => setAttempt(value => value + 1)}>
+          <GameBoundary key={attempt} retry={() => setAttempt(value => value + 1)}>
             <React.Suspense fallback={<p className="dsh-fisher-loading" role="status">正在走向海边…</p>}>
-              <Game lowPerformance={view.lowPerformance} reducedMotion={view.reducedMotion} sound={view.sound} volume={view.volume} onEnabledChange={plugin.receiveEnabled}/>
+              <Game obscured={settingsOpen} lowPerformance={view.lowPerformance} reducedMotion={view.reducedMotion} sound={view.sound} volume={view.volume} onEnabledChange={plugin.receiveEnabled}/>
             </React.Suspense>
-          </GameBoundary>}
+          </GameBoundary>
+          {settingsOpen&&<Dialog title="海岸设置" onClose={()=>setSettingsOpen(false)} closeLabel="返回海岸" className="dsh-fisher-settings-dialog"><Settings/></Dialog>}
         </div>
         <button className="dsh-fisher-resize" aria-label="调整窗口大小（方向键）" title="拖动或用方向键调整大小，也可在设置中输入尺寸"
           onPointerDown={event => start('resize', event)} onPointerMove={move} onPointerUp={end}
