@@ -21,6 +21,7 @@
     "assets/readme/*.jpg",
     "cordis.patch.yml",
     "README.md",
+    "README.en.md",
     "assets/licenses/*.txt"
   ],
   "scripts": {
