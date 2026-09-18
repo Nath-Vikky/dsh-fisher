@@ -9,7 +9,8 @@ import type { AchievementId } from './game/achievements.ts';
 import type { GuestId } from './game/guests.ts';
 import type { DecorId, DecorSlot } from './game/decor.ts';
 import type { AutoCast,AutoFishingView } from './game/auto-fishing.ts';
-export const VERSION = '0.2.0-preview.6';
+import type { ShoreState, SpotId } from './game/shore.ts';
+export const VERSION = '0.3.0-preview.1';
 export const API = '/api/dsh-fisher/v1';
 export const COAST_ASSET = `${API}/assets/l01-coast-pixel-v1.webp`;
 export type LauncherStatus='shore'|'fishing'|'waiting';
@@ -25,12 +26,13 @@ export interface Bootstrap {
   protocolVersion: 1; version: string; generation: string; revision: number; saveId: string;
   gameplayAvailable: boolean; issue: string | null; coins: number; tokens: number; research: number;
   experience: number; released: number; inventory: Catch[]; catalog: Partial<Record<SpeciesId, RecordEntry>>;
-  journey: Journey; work: WorkView; life:LifeState; autoFishing:AutoFishingView;
+  shore: ShoreState; journey: Journey; work: WorkView; life:LifeState; autoFishing:AutoFishingView;
   storage:{canManage:boolean};
   active: ActiveCast | null; pending: Catch | null; lastOutcome: 'escaped' | 'cancelled' | null;
 }
 export type Action =
   | { type: 'cast.begin'; mode: Mode }
+  | { type: 'shore.spot'; spot: SpotId }
   | { type: 'cast.resume'; castId: string }
   | { type: 'cast.cancel'; castId: string; ownerEpoch: number }
   | { type: 'cast.recover'; castId: string; ownerEpoch: number }
@@ -89,7 +91,7 @@ export function isBootstrap(value: unknown): value is Bootstrap {
   const data = value as Record<string, unknown>;
   return data.protocolVersion === 1 && typeof data.version === 'string' && typeof data.generation === 'string'
     && typeof data.saveId === 'string' && Number.isSafeInteger(data.revision) && typeof data.gameplayAvailable === 'boolean'
-    && Number.isSafeInteger(data.coins) && Array.isArray(data.inventory) && !!data.catalog && !!data.journey && !!data.work && !!data.life && !!data.autoFishing
+    && Number.isSafeInteger(data.coins) && Array.isArray(data.inventory) && !!data.catalog && !!data.journey && !!data.work && !!data.life && !!data.autoFishing && !!data.shore
     && typeof data.storage==='object' && data.storage!==null && typeof (data.storage as Record<string,unknown>).canManage==='boolean'
     && 'active' in data && 'pending' in data;
 }

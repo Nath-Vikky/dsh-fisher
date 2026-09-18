@@ -1,4 +1,4 @@
-import {BoxGeometry,BufferGeometry,CircleGeometry,CylinderGeometry,DodecahedronGeometry,DoubleSide,ExtrudeGeometry,Float32BufferAttribute,Group,InstancedMesh,Material,Matrix4,Mesh,MeshStandardMaterial,Object3D,PlaneGeometry,Shape,TorusGeometry} from 'three';
+import {BoxGeometry,BufferGeometry,CircleGeometry,CylinderGeometry,DodecahedronGeometry,DoubleSide,ExtrudeGeometry,Float32BufferAttribute,Group,InstancedMesh,Material,Matrix4,Mesh,MeshStandardMaterial,Object3D,PlaneGeometry,Shape,TorusGeometry,SphereGeometry} from 'three';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {COASTS} from './regions.ts';
 import type {CoastMap} from './regions.ts';
@@ -44,9 +44,22 @@ export class Scenery {
     }
     const sea=new Mesh(new PlaneGeometry(54,54),this.seaMaterial);sea.rotation.x=-Math.PI/2;sea.position.y=-.2;this.water.add(sea);
     for(const id of ['pier','cove'] as const){const point=map.places[id].water!;const ripple=new Mesh(new TorusGeometry(.32,.009,3,32),new MeshStandardMaterial({color:'#dcece0',transparent:true,opacity:.66,roughness:1,depthWrite:false}));ripple.rotation.x=-Math.PI/2;ripple.position.set(point.x,point.y+.014,point.z);this.ripples.push(ripple);this.water.add(ripple);}
+    if(map.id==='L01')this.waterClues();
     this.finish();
     this.group.traverse(object=>{object.updateMatrix();object.matrixAutoUpdate=false;});
     for(const ripple of this.ripples)ripple.matrixAutoUpdate=true;
+  }
+  private waterClues():void {
+    const shallow=this.map.places.cove.water!,deep=this.map.places.pier.water!;
+    const ink=new MeshStandardMaterial({color:'#396b69',transparent:true,opacity:.72,roughness:1});
+    const silver=new MeshStandardMaterial({color:'#fff1c5',roughness:.5});
+    const shape=new SphereGeometry(1,8,5);
+    for(let i=0;i<3;i++){
+      const fish=new Mesh(shape,ink);fish.scale.set(.22,.015,.06);fish.rotation.y=i*.6;
+      fish.position.set(shallow.x-.35+i*.35,shallow.y+.018,shallow.z+.2*(i%2));this.water.add(fish);
+      const bubble=new Mesh(shape,silver);bubble.scale.setScalar(.035+i*.012);
+      bubble.position.set(deep.x-.25+i*.21,deep.y+.025,deep.z+.15*(i%2));this.water.add(bubble);
+    }
   }
   private homeCoast():void{
     // Low slabs mark the garden paths, leaving both fishing approaches open.

@@ -4,7 +4,7 @@
 
 面向 DeepSeek Harness（DSH）Web 的休闲钓鱼与收藏插件。走到海边，慢慢钓一竿；也可以开启自动钓鱼，让角色在你使用 DSH 时留在岸边等鱼。
 
-**当前主线：`main` · `0.2.0-preview.6`**。提供四处可行走的 3D 海岸、精细 2D 人物与像素纸面界面，支持从源码构建并本地安装，尚未发布到 npm。
+**当前主线：`main` · `0.3.0-preview.1`**。提供四处可行走的 3D 海岸、精细 2D 人物与像素纸面界面，支持从源码构建并本地安装，尚未发布到 npm。
 
 原像素版 `0.1.0-rc.11` 完整保存在 [archive/pixel-v1-rc11](https://github.com/Nath-Vikky/dsh-fisher/tree/archive/pixel-v1-rc11)。
 

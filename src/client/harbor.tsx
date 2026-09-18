@@ -22,7 +22,7 @@ export function createHarbor(React:typeof ReactTypes) {
     const [section,setSection]=React.useState<keyof typeof names|null>(null),[supplyBait,setSupplyBait]=React.useState<SupplyBait>('B02');
     const [baitShop,setBaitShop]=React.useState(false),[slot,setSlot]=React.useState<'rod'|'line'|'float'>('rod'),[page,setPage]=React.useState(0);
     const journey=data.journey,idle=!data.active&&!data.pending,level=levelInfo(data.experience),tide=currentTide(journey);
-    const probabilities=categoryProbabilities(journey.region,journey.bait,tide),clues=journey.completed[journey.region]>=10;
+    const probabilities=categoryProbabilities(journey.region,journey.bait,tide,data.shore.spots[journey.region]),clues=journey.completed[journey.region]>=10;
     const missing=SPECIES.filter(item=>item.region===journey.region&&item.kind!=='guest'&&!data.catalog[item.id]);
     const gearItems=GEAR.filter(item=>item.slot===slot),shopBaits=BAITS.filter(item=>item.id!=='B01'&&item.id!=='B08');
     const open=(next:keyof typeof names)=>{controller.pause();setSection(next);setPage(0);setBaitShop(false);};

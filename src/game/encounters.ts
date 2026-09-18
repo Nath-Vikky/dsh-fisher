@@ -5,8 +5,10 @@ import type { Catch, Encounter, Mode } from './engine.ts';
 import { modifiers } from './gear.ts';
 import { bait, currentTide } from './progression.ts';
 import type { BaitId, Journey, Tide } from './progression.ts';
+import { spotWeights, spotPreference } from './shore.ts';
+import type { SpotId } from './shore.ts';
 export type EncounterSource = 'random' | 'pity' | 'target' | 'invitation' | 'tutorial' | 'legacy';
-export interface EncounterMeta { source:EncounterSource; region:RegionId; bait:BaitId; tide:Tide }
+export interface EncounterMeta { source:EncounterSource; region:RegionId; bait:BaitId; tide:Tide; spot?:SpotId }
 export function weighted<T>(items: readonly T[], weight:(item:T)=>number, random:()=>number): T {
   const total=items.reduce((sum,item)=>sum+weight(item),0);
   if (!(total>0)) throw new Error('没有匹配的候选，鱼饵未消耗');
@@ -14,9 +16,9 @@ export function weighted<T>(items: readonly T[], weight:(item:T)=>number, random
   for (const item of items) { pick-=weight(item); if (pick<0) return item; }
   return items[items.length-1]!;
 }
-export function categoryProbabilities(regionId:RegionId, baitId:BaitId, tide:Tide): readonly number[] {
-  const base=region(regionId).weights;
-  const weights=[base[0],base[1]*(baitId==='B05'?2:1)*(tide==='odd'?1.5:1),base[2]*(baitId==='B06'?1.25:1)];
+export function categoryProbabilities(regionId:RegionId, baitId:BaitId, tide:Tide, spot?:SpotId): readonly number[] {
+  const base=spotWeights(regionId,spot)??region(regionId).weights;
+  const weights=[base[0]!,base[1]!*(baitId==='B05'?2:1)*(tide==='odd'?1.5:1),base[2]!*(baitId==='B06'?1.25:1)];
   const total=weights.reduce((a,b)=>a+b,0);
   return weights.map(weight=>weight/total);
 }
@@ -24,13 +26,13 @@ export function preferenceAvailable(regionId:RegionId, baitId:BaitId): boolean {
   const tag=bait(baitId).tag;
   return !tag || SPECIES.some(item=>item.region===regionId&&item.tags.includes(tag));
 }
-export function rollEncounter(seed:number,id:string,mode:Mode,journey:Journey,discovered:readonly SpeciesId[]): Encounter & {meta:EncounterMeta} {
+export function rollEncounter(seed:number,id:string,mode:Mode,journey:Journey,discovered:readonly SpeciesId[],spot?:SpotId): Encounter & {meta:EncounterMeta} {
   const location=journey.region, baitId=journey.bait, tide=currentTide(journey);
   const pool=SPECIES.filter(item=>item.region===location && item.kind!=='guest');
   const missing=pool.filter(item=>!discovered.includes(item.id));
   if (!preferenceAvailable(location,baitId)) throw new Error('这个钓点没有偏好这种鱼饵的鱼，请换一种饵');
   const tag=bait(baitId).tag;
-  const preference=(item:Species)=>tag&&item.tags.includes(tag)?2:1;
+  const preference=(item:Species)=>(tag&&item.tags.includes(tag)?2:1)*spotPreference(item,spot);
   const pick=randomStream(seed,'entry-v2');
   let def:Species, source:EncounterSource='random';
   if (baitId==='B08') {
@@ -47,7 +49,7 @@ export function rollEncounter(seed:number,id:string,mode:Mode,journey:Journey,di
     if (location!=='L01'||baitId!=='B01') throw new Error('先用普通面团，在摸鱼塘完成第一竿');
   } else if (journey.dryStreak[location]>=8 && missing.length) {def=weighted(missing,preference,pick);source='pity';}
   else {
-    const probabilities=categoryProbabilities(location,baitId,tide);
+    const probabilities=categoryProbabilities(location,baitId,tide,spot);
     const category=weighted([0,1,2] as const,item=>probabilities[item]!,randomStream(seed,'category-v2'));
     const candidates=pool.filter(item=>item.kind===(['fish','abstract','relic'] as const)[category]);
     if (category===0) {
@@ -74,5 +76,5 @@ export function rollEncounter(seed:number,id:string,mode:Mode,journey:Journey,di
     caughtAt:'',isNew:false,isRecord:false,isNewVariant:false,locked:false};
   return {catch:catchItem,challenge:{seed:Math.floor(behavior()*4294967296),waitTicks:40+Math.floor(behavior()*81),
     pattern:def.pattern,mode:['target','invitation','tutorial'].includes(source)?'guided':mode,rulesVersion:2,modifiers:modifiers(journey.loadout),size:quality??500},
-    meta:{source,region:location,bait:baitId,tide}};
+    meta:{source,region:location,bait:baitId,tide,...spot?{spot}:{}}};
 }

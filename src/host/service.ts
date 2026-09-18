@@ -4,6 +4,7 @@ import type { Catch } from '../game/engine.ts';
 import { isRegionId, isSpeciesId, species } from '../game/content.ts';
 import type { SpeciesId } from '../game/content.ts';
 import { verifyContent } from '../game/content-check.ts';
+import { isSpot } from '../game/shore.ts';
 import { rollEncounter } from '../game/encounters.ts';
 import { gear, isGearId } from '../game/gear.ts';
 import { bait, consumeOverride, finishTide, isBaitId, isInventorySpecies, isTide, levelInfo, regionUnlocked } from '../game/progression.ts';
@@ -61,7 +62,7 @@ export class FisherService {
       saveId: this.save.id, gameplayAvailable: this.store.pluginEnabled && !this.stopped && !this.store.issue && !this.writeError,
       issue: this.store.issue ?? (this.writeError ? '保存没有完成，已暂停；请重试保存' : null),
       coins: this.save.coins, tokens: this.save.tokens, research: this.save.research, experience: this.save.experience,
-      released: this.save.released, inventory: this.save.inventory, catalog: this.save.catalog, journey:this.save.journey,
+      released: this.save.released, inventory: this.save.inventory, catalog: this.save.catalog, journey:this.save.journey,shore:this.save.shore,
       work: workView(this.save.work, this.clock().wall), life: this.save.life,storage:{canManage:this.store.canManage},
       autoFishing:{...this.save.autoFishing,working:this.observingWork&&this.save.autoFishing.enabled&&Object.values(this.runtime.roots).some(root=>root.until>this.clock().mono)},
       active: active ? { id: active.id, owner: active.owner, ownerEpoch: active.ownerEpoch, leaseUntil: active.leaseUntil,
@@ -247,6 +248,11 @@ export class FisherService {
     object(action);
     if (applyLifeAction(save, action)) return;
     switch (action.type) {
+      case 'shore.spot': {
+        requireState(!save.active&&!save.pending,'请先结束当前这一竿');
+        requireState(isSpot(action.spot),'未知落点');
+        save.shore.spots[save.journey.region]=action.spot;return;
+      }
       case 'cast.begin': {
         requireState(!save.active && !save.pending, '请先处理这一竿');
         requireState(!save.autoFishing.enabled,'请先关闭自动钓鱼，或接管当前这一竿');
@@ -389,7 +395,7 @@ export class FisherService {
     requireState(regionUnlocked(journey.region,save.experience,save.research),'这个钓点还未解锁');
     requireState(journey.bait==='B01'||journey.bait==='B08'||(journey.baits[journey.bait]??0)>0,'鱼饵用完了，请补充或换普通面团');
     let selected:ReturnType<typeof rollEncounter>;
-    try{selected=rollEncounter(seed,castId,mode,journey,Object.keys(save.catalog) as SpeciesId[]);}
+    try{selected=rollEncounter(seed,castId,mode,journey,Object.keys(save.catalog) as SpeciesId[],save.shore.spots[journey.region]);}
     catch(error){throw new ActionError(error instanceof Error?error.message:'没有匹配的候选');}
     if(journey.bait==='B08')journey.invitations=journey.invitations.filter(item=>item!==selected.catch.speciesId);
     else if(journey.bait!=='B01')journey.baits[journey.bait]!--;

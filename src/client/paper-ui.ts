@@ -93,4 +93,11 @@ export const paperUiStyles = `
 @container (max-height:520px){.dsh-fisher-hud-menu{display:flex;flex-direction:row;top:137px;gap:5px}.dsh-fisher .dsh-fisher-hud-menu button{width:40px;min-height:42px}.dsh-fisher-game[data-immersive=true] .dsh-fisher-world-waypoints{bottom:139px}.dsh-fisher .dsh-fisher-joystick{width:80px;height:80px}.dsh-fisher-game[data-immersive=true] .dsh-fisher-joystick-wrap{bottom:24px;right:16px}.dsh-fisher-hud-fishing>.dsh-fisher-primary,.dsh-fisher-world-interaction>.dsh-fisher-primary{min-height:72px;min-width:104px;padding:7px}.dsh-fisher-dialog-layer{padding:12px}.dsh-fisher-dialog-header,.dsh-fisher-dialog-footer{padding:7px 10px}.dsh-fisher-dialog-content{padding:10px}.dsh-fisher-slot-grid{gap:7px}.dsh-fisher .dsh-fisher-slot-grid .dsh-fisher-inventory-item,.dsh-fisher .dsh-fisher-slot-grid .dsh-fisher-catalog-open,.dsh-fisher-empty-slot{min-height:91px}.dsh-fisher-slot-grid .dsh-fisher-catalog-thumbnail,.dsh-fisher-slot-grid .dsh-fisher-undiscovered{height:42px}.dsh-fisher-ribbon-tabs svg{width:20px;height:20px}.dsh-fisher .dsh-fisher-ribbon-tabs button{min-height:48px}.dsh-fisher-inventory-footer>span{display:none}}
 @container (max-width:360px){.dsh-fisher-dialog-layer{padding:10px}.dsh-fisher-dialog-content{padding:10px}.dsh-fisher-slot-grid{gap:6px}.dsh-fisher-catalog .dsh-fisher-collection-intro .dsh-fisher-actions{gap:4px}.dsh-fisher-conversation-layer{padding:10px}.dsh-fisher-talk-paper{padding-inline:12px}.dsh-fisher-talk-bust{width:49%}.dsh-fisher .dsh-fisher-talk-line p{font-size:max(14px,var(--fisher-font))}}
 @container (max-height:520px){.dsh-fisher .dsh-fisher-hud-top .dsh-fisher-hud-location{margin-top:0}.dsh-fisher-hud-location .dsh-fisher-coast-badge{display:none}}
+.dsh-fisher-spot-picker{border:0;padding:0;margin:14px 0;min-width:0}
+.dsh-fisher-spot-picker legend{font-size:12px;color:var(--fisher-muted);margin-bottom:7px}
+.dsh-fisher-spot-picker>div{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.dsh-fisher-spot-picker button{display:grid;gap:4px;text-align:left;padding:9px}
+.dsh-fisher-spot-picker button[aria-pressed=true]{background:#c5d9bd;box-shadow:inset 0 -3px #719994}
+.dsh-fisher-spot-picker small{font-size:11px;font-weight:normal}
+.dsh-fisher-spot-picker p{font-size:12px;line-height:1.7;margin:8px 0}
 `;

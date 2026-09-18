@@ -29,7 +29,7 @@ test('save files reject corruption, excessive size and future formats before rep
   assert.throws(()=>decodeSave(original.replace('"coins":100','"coins":999')),/CHECKSUM/);
   assert.throws(()=>decodeSave(' '.repeat(MAX_SAVE_BYTES+1)),/TOO_LARGE/);
   await fixture(async(directory,open)=>{
-    const future=original.replace('"formatVersion":5','"formatVersion":999');await writeFile(join(directory,'save.json'),future);
+    const future=original.replace('"formatVersion":6','"formatVersion":999');await writeFile(join(directory,'save.json'),future);
     const service=await open();assert.equal(service.snapshot().gameplayAvailable,false);
     assert.equal(await service.exportSave(),future);assert.equal(await readFile(join(directory,'save.json'),'utf8'),future);
     await assert.rejects(service.previewSave({source:'file',text:future}));

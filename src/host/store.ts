@@ -89,7 +89,7 @@ export class SaveStore {
       if(this.workDisabled){save.work.enabled=false;save.autoFishing.enabled=false;}
       const original=await readFile(join(this.directory,'save.json'),'utf8');
       const source=object(object(JSON.parse(original)).save),sourceVersion=source.formatVersion;
-      const backupName=sourceVersion===1||sourceVersion===2||sourceVersion===3||sourceVersion===4?`save.before-v${sourceVersion+1}.json`
+      const backupName=sourceVersion===1||sourceVersion===2||sourceVersion===3||sourceVersion===4||sourceVersion===5?`save.before-v${sourceVersion+1}.json`
         :source.contentVersion===2?'save.before-content3.json':source.contentVersion===3?'save.before-content4.json':null;
       if (!this.issue && backupName) {
         const backupPath=join(this.directory,backupName);

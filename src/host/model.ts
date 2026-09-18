@@ -15,21 +15,23 @@ import type { LifeState } from '../game/life.ts';
 import { validateLife } from './life-validation.ts';
 import { emptyAutoFishing,autoFishingDuration } from '../game/auto-fishing.ts';
 import type { AutoFishingState } from '../game/auto-fishing.ts';
+import { emptyShore, isSpot } from '../game/shore.ts';
+import type { ShoreState } from '../game/shore.ts';
 import { object, integer, id } from './validation.ts';
 export { object, integer, id } from './validation.ts';
 
 export interface PrivateCast extends ActiveCast { seed: number; catch: Catch; meta: EncounterMeta }
 export interface Receipt { id: string; fingerprint: string; revision: number }
 export interface Save {
-  formatVersion: 5; rulesVersion: 2; contentVersion: 4; id: string; revision: number;
+  formatVersion: 6; rulesVersion: 2; contentVersion: 4; id: string; revision: number;
   coins: number; tokens: number; research: number; experience: number; released: number;
   inventory: Catch[]; catalog: Bootstrap['catalog']; active: PrivateCast | null; pending: Catch | null;
-  lastOutcome: Bootstrap['lastOutcome']; receipts: Receipt[]; journey: Journey; work: WorkState; life: LifeState; autoFishing:AutoFishingState;
+  lastOutcome: Bootstrap['lastOutcome']; receipts: Receipt[]; shore: ShoreState; journey: Journey; work: WorkState; life: LifeState; autoFishing:AutoFishingState;
 }
 export function emptySave(): Save {
-  const save:Save={ formatVersion: 5, rulesVersion: 2, contentVersion: 4, id: randomUUID(), revision: 0,
+  const save:Save={ formatVersion: 6, rulesVersion: 2, contentVersion: 4, id: randomUUID(), revision: 0,
     coins: 100, tokens: 0, research: 0, experience: 0, released: 0, inventory: [], catalog: {},
-    active: null, pending: null, lastOutcome: null, receipts: [], journey:emptyJourney(), work:emptyWork(),life:emptyLife(),autoFishing:emptyAutoFishing() };
+    active: null, pending: null, lastOutcome: null, receipts: [], shore:emptyShore(), journey:emptyJourney(), work:emptyWork(),life:emptyLife(),autoFishing:emptyAutoFishing() };
   refreshLife(save);return save;
 }
 function boolean(value: unknown): void { if (typeof value !== 'boolean') throw new Error('Invalid boolean'); }
@@ -49,7 +51,7 @@ function validCatch(value: unknown, complete = true): asserts value is Catch {
 }
 export function validateSave(value: unknown): asserts value is Save {
   const data = object(value);
-  if (data.formatVersion !== 5 || data.rulesVersion !== 2 || data.contentVersion !== 4) throw new Error('UNSUPPORTED_SAVE_VERSION');
+  if (data.formatVersion !== 6 || data.rulesVersion !== 2 || data.contentVersion !== 4) throw new Error('UNSUPPORTED_SAVE_VERSION');
   id(data.id); integer(data.revision); integer(data.coins, 0, 9999999); integer(data.tokens, 0, 99999);
   integer(data.research); integer(data.experience); integer(data.released);
   if (!Array.isArray(data.inventory) || data.inventory.length > 240) throw new Error('Invalid inventory');
@@ -91,6 +93,7 @@ export function validateSave(value: unknown): asserts value is Save {
     const meta=object(cast.meta);
     if (!isRegionId(meta.region)||meta.region!==(cast.catch as Catch).region||!isBaitId(meta.bait)||!isTide(meta.tide)
       ||!['random','pity','target','invitation','tutorial','legacy'].includes(String(meta.source))) throw new Error('Invalid encounter metadata');
+    if (meta.spot!==undefined&&!isSpot(meta.spot)) throw new Error('Invalid fishing spot');
     const sim = object(cast.simulation);
     integer(sim.tick, 0, 3800); integer(sim.fightTicks, 0, 3600); integer(sim.progress, 0, 1000000);
     integer(sim.tension, 0, 1000000); integer(sim.danger, 0, 300000); integer(sim.rollbacks, 0, 2);
@@ -114,6 +117,8 @@ export function validateSave(value: unknown): asserts value is Save {
     actionIds.add(actionId); integer(receipt.revision, 1, data.revision as number);
     if (typeof receipt.fingerprint !== 'string' || !/^[0-9a-f]{64}$/.test(receipt.fingerprint)) throw new Error('Invalid receipt');
   }
+  const spots=object(object(data.shore).spots);
+  for(const region of REGION_IDS)if(!isSpot(spots[region]))throw new Error('Invalid saved fishing spot');
   validateJourney(data.journey);
   validateWork(data.work);
   validateLife(data.life,data as unknown as Save);
@@ -173,10 +178,11 @@ function validateJourney(value:unknown): void {
 
 export function upgradeSave(value:unknown): Save {
   const data=structuredClone(object(value));
-  if(data.formatVersion===5){validateSave(data);return data;}
+  if(data.formatVersion===6){validateSave(data);return data;}
+  if(data.formatVersion===5){data.shore=emptyShore();data.formatVersion=6;return upgradeSave(data);}
   if (data.formatVersion===4) {
     if(data.rulesVersion===2&&(data.contentVersion===2||data.contentVersion===3))data.contentVersion=4;
-    data.formatVersion=5;data.autoFishing=emptyAutoFishing();validateSave(data);return data;
+    data.formatVersion=5;data.autoFishing=emptyAutoFishing();return upgradeSave(data);
   }
   if (data.formatVersion===3 && data.rulesVersion===2 && data.contentVersion===2) {
     data.formatVersion=4;data.contentVersion=4;data.life=emptyLife();migrateLife(data as unknown as Save);return upgradeSave(data);

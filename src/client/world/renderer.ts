@@ -30,6 +30,7 @@ export class CoastWorld {
     try{const saved=JSON.parse(localStorage.getItem(this.key)??'null') as {position?:Point;spot?:string}|null;
       if(saved?.position&&walkable(saved.position,this.map))this.position={...saved.position};if(saved?.spot==='pier'||saved?.spot==='cove')this.spot=saved.spot;
     }catch{/* Position is optional; game progress belongs to the host. */}
+    this.spot=options.data.active?.setup?.spot??options.data.shore.spots[this.map.id];
     const places=this.map.places,light=this.map.light;
     if(options.data.active||options.data.autoFishing.enabled)this.position={x:places[this.spot].x,z:places[this.spot].z};
     this.renderer=new WebGLRenderer({canvas,antialias:true,powerPreference:'low-power',alpha:false});
@@ -105,7 +106,10 @@ export class CoastWorld {
     const visitor=options.data.life.visitor,key=`${visitor??''}|${visitor?options.data.life.guests[visitor].outfit:'base'}|${options.data.journey.loadout.rod}`;
     if(this.ready&&key!==this.actorKey)void this.prepareActors().catch(()=>{if(!this.disposed){this.dispose();this.failed();}});
     const auto=options.data.autoFishing.enabled;
-    if(auto&&!this.wasAutomatic)this.go(this.spot,true);
+    const savedSpot=options.data.active?.setup?.spot??options.data.shore.spots[this.map.id];
+    const spotChanged=savedSpot!==(before.data.active?.setup?.spot??before.data.shore.spots[this.map.id]);
+    if(spotChanged)this.spot=savedSpot;
+    if(auto&&(!this.wasAutomatic||spotChanged))this.go(savedSpot,true);
     if(!auto&&this.wasAutomatic){this.path=[];this.destination=null;}
     this.wasAutomatic=auto;
     if(options.data.active&&!options.data.active.automatic&&!before.data.active){this.path=[];this.destination=null;const place=this.map.places[this.spot];this.position={x:place.x,z:place.z};}
@@ -123,9 +127,9 @@ export class CoastWorld {
     const target=this.map.places[id];this.path=route(this.position,target,this.map);this.destination=this.path.length?id:null;this.input={x:0,z:0};
     if(id!=='guest')this.spot=id;this.publish();this.start();
   }
-  dock():boolean {
-    const at=nearby(this.position,false,this.map);if(at!=='pier'&&at!=='cove'||this.locked)return false;
-    this.spot=at;const place=this.map.places[at];this.position={x:place.x,z:place.z};this.path=[];this.destination=null;this.input={x:0,z:0};this.persist();this.start();return true;
+  dock():SpotId|null {
+    const at=nearby(this.position,false,this.map);if(at!=='pier'&&at!=='cove'||this.locked)return null;
+    this.spot=at;const place=this.map.places[at];this.position={x:place.x,z:place.z};this.path=[];this.destination=null;this.input={x:0,z:0};this.persist();this.start();return at;
   }
   private start=()=>{
     if(this.suspended){cancelAnimationFrame(this.frame);this.frame=0;if(this.ready&&!this.disposed)this.canvas.dataset.renderState='paused';return;}
