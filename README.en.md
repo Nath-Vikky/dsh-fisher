@@ -4,14 +4,14 @@
 
 A relaxing fishing and collection plugin for DeepSeek Harness (DSH) Web. Head to the shore and cast a line, or enable automatic fishing and let your character wait for a catch while you use DSH.
 
-**Current main branch: `main` · `0.3.0-preview.3`**. Explore four walkable 3D shores with detailed 2D characters and a pixel-art paper interface. You can build and install the plugin locally from source; it has not been published to npm.
+**Current main branch: `main` · `0.3.0-preview.4`**. Explore four walkable 3D shores with detailed 2D characters and a pixel-art paper interface. You can build and install the plugin locally from source; it has not been published to npm.
 
 The original pixel-art version, `0.1.0-rc.11`, is preserved in full on [archive/pixel-v1-rc11](https://github.com/Nath-Vikky/dsh-fisher/tree/archive/pixel-v1-rc11).
 
 ## Screenshots
 
 <p>
-  <img src="assets/readme/coast-3d.jpg" width="360" alt="Current main branch: a walkable 3D shore with a joystick at the bottom right and menu buttons around the edges">
+  <img src="assets/readme/coast-3d.jpg" width="360" alt="An illustration of the 3D shore and pixel-art paper interface">
   <img src="assets/readme/conversation-3d.jpg" width="360" alt="Current main branch: a conversation with the player's portrait on the left and the visitor's original portrait on the right">
 </p>
 
@@ -35,16 +35,16 @@ The game UI currently uses Chinese. The English instructions below include the C
 
 ### Manual fishing
 
-1. Open “摸鱼海岸” from the floating launcher. Drag the joystick at the bottom right to walk toward the water, or use “去哪里” (Where to?) to walk to a fishing spot automatically.
+1. Open “摸鱼海岸” from the floating launcher. Hold and drag an empty area of the scene to reveal a joystick and walk toward the water, or use “去哪里” (Where to?) to walk to a fishing spot automatically.
 2. Near a fishing spot, select “在这里钓鱼” (Fish here) on the left, then “抛竿” (Cast). At Idle Pond, the shallow cove favors ordinary fish, while the pier favors curiosities and old objects. Water cues and the preparation panel explain the difference.
 3. When the float signals a bite, select “提竿” (Set the hook). Hold the reel button and release it when tension rises. Assisted line release is enabled by default; you can also use “点击切换收线” (Click to toggle reeling).
 4. When the catch popup appears, click the empty area outside it or “留下并继续” (Keep and continue) to add the catch to your inventory. You can also sell, release, or recycle it. If the inventory is full, you must resolve the catch first.
 
-Focus the scene or joystick before using the arrow keys / WASD. Manual fishing pauses when you close the game window, leave the page, or click outside the game. Select “继续这一竿” (Resume this cast) when you return.
+Focus the scene before using the arrow keys / WASD. Manual fishing pauses when you close the game window, leave the page, or click outside the game. Select “继续这一竿” (Resume this cast) when you return.
 
 ### Automatic fishing
 
-Open “托管” (Auto) on the right and enable “自动钓鱼” (Automatic fishing). Your character walks back to the selected fishing spot and uses your current bait and equipment. Fishing progresses with DSH model responses and tool activity. By default, catches go into your inventory or collection automatically, with a summary when you return. Choose “随心钓” (Relax), “补图鉴” (Collection), “攒壳币” (Coins), or “找线索” (Clues). Collection favors undiscovered entries at the cost of longer waits. Coins sells eligible duplicate ordinary fish in their original appearance, preserving first discoveries, records, and special appearances. Clues waits for your input after a discovery. Goal changes apply to the next cast. Automatic fishing pauses if the inventory is full or bait runs out.
+Open “托管” (Auto) on the right and turn on the prominent “自动钓鱼” (Automatic fishing) switch. Your character walks back to the selected fishing spot and uses your current bait and equipment. Fishing progresses with DSH model responses and tool activity. By default, catches go into your inventory or collection automatically, with a summary when you return. Use the goal cards to choose “随心钓” (Relax), “补图鉴” (Collection), “攒壳币” (Coins), or “找线索” (Clues). Collection favors undiscovered entries at the cost of longer waits. Coins sells eligible duplicate ordinary fish in their original appearance, preserving first discoveries, records, and special appearances. Clues waits for your input after a discovery. Goal changes apply to the next cast. Automatic fishing pauses if the inventory is full or bait runs out.
 
 Select “接管这一竿” (Take over this cast) to switch to manual fishing while retaining the catch and progress already accumulated. Automatic fishing is off by default and is independent of work supplies. It can continue while the game window is closed, but no offline time is credited after you exit DSH or qualifying activity stops.
 
