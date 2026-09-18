@@ -35,9 +35,17 @@ export function stepCurrent(sim:Simulation, challenge:Challenge, input:boolean):
   }
   const effect=behavior(next.fightTicks,challenge);
   const size=challenge.size ?? 500;
-  const push=safety?0:effect.push*(.85+.3*size/1000)*(effect.burst?gear.burst/1000:challenge.pattern==='heavy'?gear.heavyPush/1000:1);
+  let push=safety?0:effect.push*(.85+.3*size/1000)*(effect.burst?gear.burst/1000:challenge.pattern==='heavy'?gear.heavyPush/1000:1);
+  if(challenge.guard==='A002'){
+    next.guardTicks=Math.max(0,(sim.guardTicks??0)-1);
+    if(!sim.guardUsed&&((effect.burst&&sim.tension>=550000)||sim.danger>=75000)){
+      next.guardUsed=true;next.guardTicks=24;
+    }
+    if(next.guardTicks>0)push*=.1;
+  }
   const resistance=safety?0:effect.resistance*gear.heavyResistance/1000;
   next.tension=clamp(sim.tension+(reel?140*gear.reelTension/1000+push:-260+push)*50,1000000);
+  if(next.guardUsed&&!sim.guardUsed)next.tension=Math.max(0,next.tension-180000);
   const regress=(sim.tension<80000?35*gear.slack/1000:15)*(assisted?.7:1);
   next.progress=clamp(sim.progress+(reel?(safety?140:Math.max(45,gear.speed-resistance)):-regress)*50,1000000);
   if (next.tension>850000) next.danger=clamp(sim.danger+5000,300000);

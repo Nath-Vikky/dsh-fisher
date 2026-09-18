@@ -10,9 +10,10 @@ import {encodeSave,decodeSave} from '../src/host/save-codec.ts';
 import {FisherService} from '../src/host/service.ts';
 import type {WorkEvent} from '../src/host/work-runtime.ts';
 import type {Action,ActionRequest,InputRequest} from '../src/protocol.ts';
-import {autoFishingDuration} from '../src/game/auto-fishing.ts';
+import {autoFishingDuration,autoSellable} from '../src/game/auto-fishing.ts';
 import {rollEncounter} from '../src/game/encounters.ts';
-import {step} from '../src/game/engine.ts';
+import {step,initialSimulation} from '../src/game/engine.ts';
+import {SPECIES,species} from '../src/game/content.ts';
 
 const root=resolve(import.meta.dirname,'../tmp'),base=Date.UTC(2026,8,14),hash=(s:string)=>createHash('sha256').update(s).digest('hex');
 function request(service:FisherService,action:Action):ActionRequest {
@@ -125,4 +126,54 @@ test('rarity, appearance and giant size extend automatic fishing duration',()=>{
   assert.ok(rare>normal);assert.ok(autoFishingDuration({...item,variant:'pearl'})>normal);
   assert.ok(autoFishingDuration({...item,variant:'starsand'})>autoFishingDuration({...item,variant:'pearl'}));
   assert.ok(autoFishingDuration({...item,variant:'original',quality:990})>normal);
+});
+
+test('catalog goal favors missing entries at a time cost without replacing directed catches',()=>{
+  const journey=emptySave().journey;journey.tutorialDone=true;
+  const known=SPECIES.filter(def=>def.id!=='F002').map(def=>def.id);let normal=0,planned=0;
+  for(let seed=0;seed<400;seed++){
+    const a=rollEncounter(seed,'n','assisted',journey,known,'cove'),b=rollEncounter(seed,'p','assisted',journey,known,'cove','catalog');
+    if(a.catch.speciesId==='F002')normal++;if(b.catch.speciesId==='F002')planned++;
+  }
+  assert.ok(planned>normal*1.5);
+  const fish=rollEncounter(50,'time','assisted',journey,[],'cove').catch;
+  assert.equal(autoFishingDuration(fish,'catalog'),Math.min(1200000,autoFishingDuration(fish)*1.25));
+  journey.bait='B07';journey.target='F002';journey.completed.L01=10;
+  assert.equal(rollEncounter(42,'target','assisted',journey,known,'pier','catalog').catch.speciesId,'F002');
+});
+
+function waitingSave(goal:'coins'|'clues',first=false):Save {
+  const save=emptySave();save.autoFishing.enabled=true;save.autoFishing.goal=goal;
+  const selected=rollEncounter(50,'frozen-goal','assisted',save.journey,[],goal==='clues'?'cove':'pier',goal);
+  assert.equal(selected.catch.variant,'original');
+  if(!first)save.catalog.F001={count:1,bestLengthMm:species('F001').max!,bestWeightG:1000000,variants:{original:1}};
+  const duration=autoFishingDuration(selected.catch,goal);
+  save.active={id:selected.catch.id,owner:'automatic',ownerEpoch:1,leaseUntil:0,castRevision:0,inputCursor:0,paused:true,
+    seed:50,challenge:selected.challenge,catch:selected.catch,meta:selected.meta,simulation:{...initialSimulation(),phase:'waiting'},automatic:{requiredMs:duration,elapsedMs:duration-1000}};
+  return save;
+}
+test('coin goal sells only eligible duplicates; mid-cast goal changes preserve the frozen sale decision',async()=>{
+  await fixture(async({open,emit,time})=>{
+    const s=await open();await send(s,{type:'auto.goal',goal:'relax'});emit(s,0,'start');time(1000);await s.flushWork();
+    const state=s.snapshot();assert.equal(state.autoFishing.goal,'relax');assert.equal(state.autoFishing.sold,1);assert.equal(state.autoFishing.caught,1);
+    assert.equal(state.inventory.length,0);assert.equal(state.coins,100+state.autoFishing.earnedCoins);assert.deepEqual(state.autoFishing.recentSold,['frozen-goal']);
+    await s.flushWork();assert.equal(s.snapshot().autoFishing.sold,1);
+  },waitingSave('coins'));
+  await fixture(async({open,emit,time})=>{
+    const s=await open();emit(s,0,'start');time(1000);await s.flushWork();
+    assert.equal(s.snapshot().autoFishing.sold,0);assert.equal(s.snapshot().inventory.length,1);assert.equal(s.snapshot().inventory[0]!.isNew,true);
+    const item=s.snapshot().inventory[0]!;
+    for(const patch of [{isRecord:true},{variant:'pearl' as const},{variant:'starsand' as const},{isNewVariant:true},{locked:true}])assert.equal(autoSellable({...item,isNew:false,isNewVariant:false,...patch}),false);
+  },waitingSave('coins',true));
+});
+test('clue goal stops after a persistent discovery and continues at the pier after reading it',async()=>{
+  const save=waitingSave('clues');save.shore.searched=1;
+  await fixture(async({open,emit,time})=>{
+    const s=await open();emit(s,0,'start');time(1000);await s.flushWork();
+    assert.equal(s.snapshot().shore.story,'bottle');assert.equal(s.snapshot().active,null);assert.match(s.snapshot().autoFishing.reason!,/贝邮/);
+    emit(s,1000,'activity');time(20000);await s.flushWork();assert.equal(s.snapshot().autoFishing.caught,1);
+    await send(s,{type:'shore.read'});emit(s,20000,'activity');time(21000);await s.flushWork();
+    assert.equal(s.snapshot().active?.setup?.spot,'pier');assert.equal(s.snapshot().shore.story,'charted');
+    assert.equal(s.snapshot().active?.setup?.autoGoal,'clues');
+  },save);
 });

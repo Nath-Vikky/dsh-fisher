@@ -9,8 +9,8 @@ export const SPOT_IDS = ['pier', 'cove'] as const;
 export type SpotId = typeof SPOT_IDS[number];
 export const STORY_STAGES = ['quiet','bottle','charted','recovered','built'] as const;
 export type ShoreStory = typeof STORY_STAGES[number];
-export interface ShoreState { spots: Record<RegionId, SpotId>; story: ShoreStory; searched: number; timber: number }
-export function emptyShore(): ShoreState { return { spots: { L01:'pier', L02:'pier', L03:'pier', L04:'pier' },story:'quiet',searched:0,timber:0 }; }
+export interface ShoreState { spots: Record<RegionId, SpotId>; story: ShoreStory; searched: number; timber: number; companion:'A002'|null }
+export function emptyShore(): ShoreState { return { spots: { L01:'pier', L02:'pier', L03:'pier', L04:'pier' },story:'quiet',searched:0,timber:0,companion:null }; }
 export function isSpot(value: unknown): value is SpotId { return value === 'pier' || value === 'cove'; }
 export function waterClue(spot: SpotId, tide: Tide): { title: string; detail: string } {
   return spot === 'cove'

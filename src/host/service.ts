@@ -21,7 +21,7 @@ import type { WorkEvent, WorkRuntime, WorkTime } from './work-runtime.ts';
 import { recordLifeEvent, refreshLife } from '../game/life.ts';
 import { applyLifeAction } from './life-actions.ts';
 import { ActionError, award, requireDisposable, requireState } from './actions-common.ts';
-import { autoFishingDuration } from '../game/auto-fishing.ts';
+import { autoFishingDuration,automaticSpot,cluePause,autoSellable,isAutoGoal } from '../game/auto-fishing.ts';
 import type { Mode } from '../game/engine.ts';
 export { ActionError } from './actions-common.ts';
 
@@ -59,13 +59,14 @@ export class FisherService {
   subscribe(listener: () => void): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   snapshot(): Bootstrap {
     const { active } = this.save;
+    const reason=this.save.autoFishing.goal==='clues'&&!active&&!this.save.pending?cluePause(this.save.journey.region,this.save.shore):this.save.autoFishing.reason;
     return structuredClone({ protocolVersion: 1, version: VERSION, generation: this.generation, revision: this.save.revision,
       saveId: this.save.id, gameplayAvailable: this.store.pluginEnabled && !this.stopped && !this.store.issue && !this.writeError,
       issue: this.store.issue ?? (this.writeError ? '保存没有完成，已暂停；请重试保存' : null),
       coins: this.save.coins, tokens: this.save.tokens, research: this.save.research, experience: this.save.experience,
       released: this.save.released, inventory: this.save.inventory, catalog: this.save.catalog, journey:this.save.journey,shore:this.save.shore,
       work: workView(this.save.work, this.clock().wall), life: this.save.life,storage:{canManage:this.store.canManage},
-      autoFishing:{...this.save.autoFishing,working:this.observingWork&&this.save.autoFishing.enabled&&Object.values(this.runtime.roots).some(root=>root.until>this.clock().mono)},
+      autoFishing:{...this.save.autoFishing,reason,working:!reason&&this.observingWork&&this.save.autoFishing.enabled&&Object.values(this.runtime.roots).some(root=>root.until>this.clock().mono)},
       active: active ? { id: active.id, owner: active.owner, ownerEpoch: active.ownerEpoch, leaseUntil: active.leaseUntil,
         castRevision: active.castRevision, inputCursor: active.inputCursor, paused: active.paused,
         challenge: active.challenge, simulation: active.simulation,setup:active.meta,automatic:active.automatic??null } : null,
@@ -363,6 +364,8 @@ export class FisherService {
         requireState(typeof action.enabled === 'boolean', '请选择工作补给状态');
         save.work.enabled = action.enabled; break;
       }
+      case 'auto.goal':
+        requireState(isAutoGoal(action.goal),'未知托管目标');save.autoFishing.goal=action.goal;save.autoFishing.reason=null;return;
       case 'auto.enable': {
         requireState(typeof action.enabled==='boolean','请选择自动钓鱼状态');
         save.autoFishing.enabled=action.enabled;save.autoFishing.reason=null;break;
@@ -395,16 +398,18 @@ export class FisherService {
     const castId=randomUUID(),seed=randomBytes(4).readUInt32LE(),journey=save.journey;
     requireState(regionUnlocked(journey.region,save.experience,save.research),'这个钓点还未解锁');
     requireState(journey.bait==='B01'||journey.bait==='B08'||(journey.baits[journey.bait]??0)>0,'鱼饵用完了，请补充或换普通面团');
+    if(automatic)save.shore.spots[journey.region]=automaticSpot(save.autoFishing.goal,journey.region,save.shore,Object.keys(save.catalog) as SpeciesId[]);
     let selected:ReturnType<typeof rollEncounter>;
-    try{selected=rollEncounter(seed,castId,mode,journey,Object.keys(save.catalog) as SpeciesId[],save.shore.spots[journey.region]);}
+    try{selected=rollEncounter(seed,castId,mode,journey,Object.keys(save.catalog) as SpeciesId[],save.shore.spots[journey.region],automatic?save.autoFishing.goal:undefined);}
     catch(error){throw new ActionError(error instanceof Error?error.message:'没有匹配的候选');}
+    if(save.shore.companion==='A002')selected.challenge.guard='A002';
     if(journey.bait==='B08')journey.invitations=journey.invitations.filter(item=>item!==selected.catch.speciesId);
     else if(journey.bait!=='B01')journey.baits[journey.bait]!--;
     consumeOverride(journey);
     const cast:PrivateCast={id:castId,seed,catch:selected.catch,challenge:selected.challenge,meta:selected.meta,
       owner:clientId,ownerEpoch:1,leaseUntil:automatic?0:Date.now()+15000,castRevision:0,inputCursor:0,paused:automatic,
       simulation:automatic?{...initialSimulation(),phase:'waiting'}:initialSimulation(),
-      automatic:automatic?{elapsedMs:0,requiredMs:autoFishingDuration(selected.catch)}:null};
+      automatic:automatic?{elapsedMs:0,requiredMs:autoFishingDuration(selected.catch,selected.meta.autoGoal)}:null};
     save.active=cast;save.lastOutcome=null;return cast;
   }
   private advanceAutomatic(save:Save,ms:number):void {
@@ -412,6 +417,7 @@ export class FisherService {
     if(save.pending){save.autoFishing.reason='请先处理待领取的收获';return;}
     while(ms>0){
       if(!save.active){
+        if(save.autoFishing.goal==='clues'){const reason=cluePause(save.journey.region,save.shore);if(reason){save.autoFishing.reason=reason;return;}}
         if(save.inventory.length>=240){save.autoFishing.reason='背包已满，整理后自动继续';return;}
         try{this.beginCast(save,'automatic','assisted',true);}
         catch(error){if(!(error instanceof ActionError))throw error;save.autoFishing.reason=error.message;return;}
@@ -421,13 +427,19 @@ export class FisherService {
       if(auto.elapsedMs<auto.requiredMs)return;
       this.completeCatch(save,cast);
       const item=save.pending!;
-      if(isInventorySpecies(item.speciesId)){
+      const sold=cast.meta.autoGoal==='coins'&&autoSellable(item);
+      if(sold){
+        const before=save.coins;award(save,item.price);save.autoFishing.earnedCoins=Math.min(2147483647,save.autoFishing.earnedCoins+save.coins-before);
+        save.autoFishing.sold=Math.min(2147483647,save.autoFishing.sold+1);save.autoFishing.recentSold.push(item.id);
+      }else if(isInventorySpecies(item.speciesId)){
         if(save.inventory.length>=240){save.autoFishing.reason='背包已满，请处理这份收获';return;}
         save.inventory.push(item);
       }
       save.autoFishing.caught=Math.min(2147483647,save.autoFishing.caught+1);
       save.autoFishing.recent.push(structuredClone(item));save.autoFishing.recent=save.autoFishing.recent.slice(-12);
+      save.autoFishing.recentSold=save.autoFishing.recentSold.filter(id=>save.autoFishing.recent.some(item=>item.id===id));
       save.pending=null;
+      if(save.autoFishing.goal==='clues'){const reason=cluePause(save.journey.region,save.shore);if(reason){save.autoFishing.reason=reason;return;}}
     }
   }
   private resolveCatch(save: Save, item: Catch, choice: 'sell' | 'release'): void {

@@ -7,10 +7,10 @@ export const TICK_MS = 50;
 export const MAX_TICKS = 3600;
 export type Mode = 'standard' | 'assisted' | 'guided';
 export type Phase = 'casting' | 'waiting' | 'bite' | 'fighting' | 'caught' | 'escaped' | 'recovery';
-export interface Challenge { seed: number; waitTicks: number; pattern: Pattern; mode: Mode; rulesVersion?: 2; modifiers?: Modifiers; size?: number }
+export interface Challenge { seed: number; waitTicks: number; pattern: Pattern; mode: Mode; rulesVersion?: 2; modifiers?: Modifiers; size?: number; guard?:'A002' }
 export interface Simulation {
   tick: number; fightTicks: number; phase: Phase; progress: number; tension: number;
-  danger: number; reel: boolean; assistedRelease: boolean; rollbacks: number; peakDanger?: number;
+  danger: number; reel: boolean; assistedRelease: boolean; rollbacks: number; peakDanger?: number; guardUsed?:boolean; guardTicks?:number;
 }
 export interface InputEdge { tick: number; reel: boolean }
 export interface Catch {
@@ -58,6 +58,7 @@ export function initialSimulation(): Simulation {
 export function warning(sim: Simulation, challenge: Challenge): string {
   if (sim.phase === 'recovery') return '这一竿需要恢复，收获仍然保留';
   if (sim.phase !== 'fighting') return '';
+  if((sim.guardTicks??0)>0)return '刀盾狗正在护线 · 挡住这阵冲击';
   if (sim.fightTicks >= 3000) return '水流在帮你，把这一竿慢慢收回来';
   if (sim.danger > 0) return '鱼线吃紧 · 松开收线';
   if (challenge.rulesVersion === 2) return behavior(sim.fightTicks, challenge).hint || (sim.assistedRelease ? '辅助松线中' : '按住收线，张力升高时松开');

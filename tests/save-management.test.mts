@@ -29,7 +29,7 @@ test('save files reject corruption, excessive size and future formats before rep
   assert.throws(()=>decodeSave(original.replace('"coins":100','"coins":999')),/CHECKSUM/);
   assert.throws(()=>decodeSave(' '.repeat(MAX_SAVE_BYTES+1)),/TOO_LARGE/);
   await fixture(async(directory,open)=>{
-    const future=original.replace('"formatVersion":7','"formatVersion":999');await writeFile(join(directory,'save.json'),future);
+    const future=original.replace('"formatVersion":8','"formatVersion":999');await writeFile(join(directory,'save.json'),future);
     const service=await open();assert.equal(service.snapshot().gameplayAvailable,false);
     assert.equal(await service.exportSave(),future);assert.equal(await readFile(join(directory,'save.json'),'utf8'),future);
     await assert.rejects(service.previewSave({source:'file',text:future}));
@@ -59,13 +59,13 @@ test('import preserves a committed encounter, disables observation, invalidates 
 test('delete clears only enumerated game files and a durable reset intent survives restart',async()=>{
   await fixture(async(directory,open)=>{
     let service=await open();await send(service,{type:'work.enable',enabled:true});
-    await writeFile(join(directory,'save.before-v5.json'),await service.exportSave());
+    for(const version of [5,6,7,8])await writeFile(join(directory,`save.before-v${version}.json`),await service.exportSave());
     await writeFile(join(directory,'save.before-content3.json'),await service.exportSave());await writeFile(join(directory,'saveXbackupYjson'),'keep');
     const original=await readFile(join(directory,'save.json'),'utf8');await assert.rejects(send(service,{type:'save.delete',confirmation:'删除'}));
     assert.equal(await readFile(join(directory,'save.json'),'utf8'),original);
     const deletion=request(service,{type:'save.delete',confirmation:'删除摸鱼海岸'});await service.mutate(deletion,false);
     assert.equal((await service.mutate(deletion,false)).duplicate,true);assert.equal(service.snapshot().coins,100);assert.equal(service.snapshot().work.enabled,false);
-    await assert.rejects(readFile(join(directory,'save.before-v5.json')),/ENOENT/);
+    for(const version of [5,6,7,8])await assert.rejects(readFile(join(directory,`save.before-v${version}.json`)),/ENOENT/);
     await assert.rejects(readFile(join(directory,'save.before-content3.json')),/ENOENT/);assert.equal(await readFile(join(directory,'saveXbackupYjson'),'utf8'),'keep');
     await send(service,{type:'work.enable',enabled:true});await service.close();
     const resetId=randomUUID();await writeFile(join(directory,'disabled.json'),JSON.stringify({version:1,workDisabled:true,resetId}));

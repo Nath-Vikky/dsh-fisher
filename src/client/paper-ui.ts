@@ -105,4 +105,7 @@ export const paperUiStyles = `
 .dsh-fisher-panel:has(>.dsh-fisher-conversation-layer:not([inert])) .dsh-fisher-hud-story{visibility:hidden}
 .dsh-fisher-shore-journal{display:grid;gap:10px}.dsh-fisher-shore-journal p,.dsh-fisher-shore-journal h3{margin:0}.dsh-fisher-story-mark{font-size:36px;color:#5b8f83}.dsh-fisher-shore-next{padding:10px;background:#dce4c5;font-size:13px}.dsh-fisher-donation-list{display:grid;gap:6px}.dsh-fisher-donation-list button[aria-pressed=true]{background:#c5d9bd}
 @container(max-height:520px){.dsh-fisher .dsh-fisher-hud-story{top:191px}}
+.dsh-fisher-shore-tabs{display:flex;gap:8px}.dsh-fisher-shore-tabs button{flex:1}.dsh-fisher-shore-tabs button[aria-pressed=true]{background:#c5d9bd}
+.dsh-fisher-companion-portrait{display:block;max-width:100%;width:140px;height:140px;object-fit:contain;margin:auto}
+.dsh-fisher-auto-plan{margin:10px 0;font-size:12px}.dsh-fisher-auto-plan label{display:flex;gap:12px;align-items:center}.dsh-fisher-auto-plan select{flex:1;min-width:0;padding:7px;background:var(--fisher-paper);color:var(--fisher-ink);border:1px solid var(--fisher-edge)}.dsh-fisher-auto-plan p{line-height:1.65;margin:7px 0}.dsh-fisher-auto-plan small{color:var(--fisher-muted)}
 `;

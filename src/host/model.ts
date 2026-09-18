@@ -13,7 +13,7 @@ import type { WorkState } from '../game/work.ts';
 import { emptyLife, migrateLife, refreshLife } from '../game/life.ts';
 import type { LifeState } from '../game/life.ts';
 import { validateLife } from './life-validation.ts';
-import { emptyAutoFishing,autoFishingDuration } from '../game/auto-fishing.ts';
+import { emptyAutoFishing,autoFishingDuration,isAutoGoal } from '../game/auto-fishing.ts';
 import type { AutoFishingState } from '../game/auto-fishing.ts';
 import { emptyShore, isSpot, STORY_STAGES } from '../game/shore.ts';
 import type { ShoreState } from '../game/shore.ts';
@@ -23,13 +23,13 @@ export { object, integer, id } from './validation.ts';
 export interface PrivateCast extends ActiveCast { seed: number; catch: Catch; meta: EncounterMeta }
 export interface Receipt { id: string; fingerprint: string; revision: number }
 export interface Save {
-  formatVersion: 7; rulesVersion: 2; contentVersion: 4; id: string; revision: number;
+  formatVersion: 8; rulesVersion: 2; contentVersion: 4; id: string; revision: number;
   coins: number; tokens: number; research: number; experience: number; released: number;
   inventory: Catch[]; catalog: Bootstrap['catalog']; active: PrivateCast | null; pending: Catch | null;
   lastOutcome: Bootstrap['lastOutcome']; receipts: Receipt[]; shore: ShoreState; journey: Journey; work: WorkState; life: LifeState; autoFishing:AutoFishingState;
 }
 export function emptySave(): Save {
-  const save:Save={ formatVersion: 7, rulesVersion: 2, contentVersion: 4, id: randomUUID(), revision: 0,
+  const save:Save={ formatVersion: 8, rulesVersion: 2, contentVersion: 4, id: randomUUID(), revision: 0,
     coins: 100, tokens: 0, research: 0, experience: 0, released: 0, inventory: [], catalog: {},
     active: null, pending: null, lastOutcome: null, receipts: [], shore:emptyShore(), journey:emptyJourney(), work:emptyWork(),life:emptyLife(),autoFishing:emptyAutoFishing() };
   refreshLife(save);return save;
@@ -51,7 +51,7 @@ function validCatch(value: unknown, complete = true): asserts value is Catch {
 }
 export function validateSave(value: unknown): asserts value is Save {
   const data = object(value);
-  if (data.formatVersion !== 7 || data.rulesVersion !== 2 || data.contentVersion !== 4) throw new Error('UNSUPPORTED_SAVE_VERSION');
+  if (data.formatVersion !== 8 || data.rulesVersion !== 2 || data.contentVersion !== 4) throw new Error('UNSUPPORTED_SAVE_VERSION');
   id(data.id); integer(data.revision); integer(data.coins, 0, 9999999); integer(data.tokens, 0, 99999);
   integer(data.research); integer(data.experience); integer(data.released);
   if (!Array.isArray(data.inventory) || data.inventory.length > 240) throw new Error('Invalid inventory');
@@ -90,7 +90,9 @@ export function validateSave(value: unknown): asserts value is Save {
       integer(params.heavyPush,900,1000);integer(params.heavyResistance,920,1000);integer(params.slack,700,1000);
       integer(params.warningTicks,0,4);integer(params.recovery,80,100);integer(challenge.size,0,1000);
     } else if (challenge.rulesVersion!==undefined || !['steady','dart','rollback'].includes(String(challenge.pattern)) || challenge.mode==='guided') throw new Error('Invalid legacy challenge');
+    if(challenge.guard!==undefined&&(challenge.guard!=='A002'||challenge.rulesVersion!==2))throw new Error('Invalid companion guard');
     const meta=object(cast.meta);
+    if(meta.autoGoal!==undefined&&!isAutoGoal(meta.autoGoal))throw new Error('Invalid automatic goal');
     if (!isRegionId(meta.region)||meta.region!==(cast.catch as Catch).region||!isBaitId(meta.bait)||!isTide(meta.tide)
       ||!['random','pity','target','invitation','tutorial','legacy'].includes(String(meta.source))) throw new Error('Invalid encounter metadata');
     if (meta.spot!==undefined&&!isSpot(meta.spot)) throw new Error('Invalid fishing spot');
@@ -98,11 +100,14 @@ export function validateSave(value: unknown): asserts value is Save {
     integer(sim.tick, 0, 3800); integer(sim.fightTicks, 0, 3600); integer(sim.progress, 0, 1000000);
     integer(sim.tension, 0, 1000000); integer(sim.danger, 0, 300000); integer(sim.rollbacks, 0, 2);
     boolean(sim.reel); boolean(sim.assistedRelease);
+    if(sim.guardUsed!==undefined)boolean(sim.guardUsed);
+    if(sim.guardTicks!==undefined)integer(sim.guardTicks,0,24);
+    if((sim.guardUsed||sim.guardTicks)&&challenge.guard!=='A002'||sim.guardTicks&&!sim.guardUsed)throw new Error('Invalid guard state');
     if (sim.peakDanger!==undefined) integer(sim.peakDanger,sim.danger as number,300000);
     if (!['casting', 'waiting', 'bite', 'fighting','recovery'].includes(String(sim.phase))) throw new Error('Invalid active phase');
     if (sim.phase==='recovery' && (sim.fightTicks!==3600 || cast.paused!==true)) throw new Error('Invalid recovery');
     if(cast.automatic!==null&&cast.automatic!==undefined){
-      const auto=object(cast.automatic),duration=autoFishingDuration(cast.catch as Catch);
+      const auto=object(cast.automatic),duration=autoFishingDuration(cast.catch as Catch,meta.autoGoal as import('../game/auto-fishing.ts').AutoGoal|undefined);
       if(auto.requiredMs!==duration||cast.paused!==true||sim.phase!=='waiting'||sim.tick!==0||sim.fightTicks!==0||sim.progress!==0)throw new Error('Invalid automatic cast');
       integer(auto.elapsedMs,0,duration-1);
     }
@@ -119,6 +124,7 @@ export function validateSave(value: unknown): asserts value is Save {
   }
   const shore=object(data.shore),spots=object(shore.spots);
   if(!STORY_STAGES.some(stage=>stage===shore.story))throw new Error('Invalid shore story');
+  if(shore.companion!==null&&(shore.companion!=='A002'||!object(data.catalog).A002))throw new Error('Invalid shore companion');
   integer(shore.searched,0,2);integer(shore.timber,0,2);
   if(shore.story==='quiet'?shore.searched===2:shore.searched!==2)throw new Error('Invalid shore story progress');
   if(shore.story!=='recovered'&&shore.timber!==0)throw new Error('Invalid building materials');
@@ -126,7 +132,10 @@ export function validateSave(value: unknown): asserts value is Save {
   validateJourney(data.journey);
   validateWork(data.work);
   validateLife(data.life,data as unknown as Save);
-  const auto=object(data.autoFishing);boolean(auto.enabled);integer(auto.caught);integer(auto.seen,0,auto.caught as number);
+  const auto=object(data.autoFishing);boolean(auto.enabled);
+  if(!isAutoGoal(auto.goal))throw new Error('Invalid automatic goal');
+  integer(auto.sold,0,integer(auto.caught));integer(auto.earnedCoins);
+  if(!Array.isArray(auto.recentSold)||auto.recentSold.length>12||new Set(auto.recentSold).size!==auto.recentSold.length||!Array.isArray(auto.recent)||auto.recentSold.some(id=>!(auto.recent as Catch[]).some(item=>item.id===id)))throw new Error('Invalid sale history');integer(auto.caught);integer(auto.seen,0,auto.caught as number);
   if(auto.reason!==null&&(typeof auto.reason!=='string'||auto.reason.length>160))throw new Error('Invalid automatic fishing status');
   if(!Array.isArray(auto.recent)||auto.recent.length>12||auto.recent.length>(auto.caught as number))throw new Error('Invalid automatic catch history');
   for(const item of auto.recent)validCatch(item);
@@ -182,7 +191,8 @@ function validateJourney(value:unknown): void {
 
 export function upgradeSave(value:unknown): Save {
   const data=structuredClone(object(value));
-  if(data.formatVersion===7){validateSave(data);return data;}
+  if(data.formatVersion===8){validateSave(data);return data;}
+  if(data.formatVersion===7){data.shore={...object(data.shore),companion:null};data.autoFishing={...object(data.autoFishing),goal:'relax',sold:0,earnedCoins:0,recentSold:[]};data.formatVersion=8;return upgradeSave(data);}
   if(data.formatVersion===6){data.shore={...object(data.shore),story:'quiet',searched:0,timber:0};data.formatVersion=7;return upgradeSave(data);}
   if(data.formatVersion===5){data.shore=emptyShore();data.formatVersion=6;return upgradeSave(data);}
   if (data.formatVersion===4) {

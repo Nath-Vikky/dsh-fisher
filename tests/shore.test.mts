@@ -10,7 +10,8 @@ import { FisherService } from '../src/host/service.ts';
 import { encodeSave,decodeSave } from '../src/host/save-codec.ts';
 import { categoryProbabilities,rollEncounter } from '../src/game/encounters.ts';
 import type { Action,ActionRequest,InputRequest } from '../src/protocol.ts';
-import { step } from '../src/game/engine.ts';
+import { step,initialSimulation,replay } from '../src/game/engine.ts';
+import { modifiers } from '../src/game/gear.ts';
 
 const root=resolve(import.meta.dirname,'../tmp');
 function request(s:FisherService,action:Action):ActionRequest {
@@ -88,4 +89,25 @@ test('bottle story persists through the catch loop and the building spends expli
     assert.deepEqual(s.snapshot().catalog,before.catalog);await assert.rejects(send(s,{type:'shore.build'}),/备齐/);
     assert.equal(decodeSave(await s.exportSave()).save.shore.story,'built');
   },save);
+});
+test('companion is collection-gated and changing it never rewrites a committed challenge',async()=>{
+  await fixture(async(s)=>{await assert.rejects(send(s,{type:'shore.companion',companion:'A002'}),/先在图鉴/);});
+  const save=emptySave();save.catalog.A002={count:1,bestLengthMm:300,bestWeightG:500,variants:{original:1}};
+  await fixture(async(s)=>{
+    await send(s,{type:'shore.companion',companion:'A002'});await send(s,{type:'cast.begin',mode:'standard'});
+    const frozen=s.snapshot().active!.challenge;assert.equal(frozen.guard,'A002');
+    await send(s,{type:'shore.companion',companion:null});assert.deepEqual(s.snapshot().active!.challenge,frozen);
+    assert.equal(decodeSave(await s.exportSave()).save.active!.challenge.guard,'A002');
+  },save);
+});
+test('the guard absorbs one burst, persists in replay, and cannot recharge on later bursts',()=>{
+  const challenge={seed:0,waitTicks:50,pattern:'dart',mode:'standard',rulesVersion:2,modifiers:modifiers({rod:'D01',line:'N01',float:'U01'}),size:500,guard:'A002'} as const;
+  const start={...initialSimulation(),phase:'fighting',tick:100,fightTicks:79,tension:600000,reel:true} as const;
+  const guarded=step(start,challenge,true),plain=step(start,{...challenge,guard:undefined},true);
+  assert.equal(guarded.guardUsed,true);assert.equal(guarded.guardTicks,24);assert.ok(guarded.tension<plain.tension-150000);
+  let direct=guarded;for(let i=0;i<30;i++)direct=step(direct,challenge,false);
+  assert.deepEqual(replay(guarded,challenge,guarded.tick+30,[{tick:guarded.tick+1,reel:false}]),direct);
+  assert.equal(direct.guardTicks,0);
+  const later=step({...direct,phase:'fighting',fightTicks:239,tension:600000,danger:80000},challenge,true);
+  assert.equal(later.guardTicks,0);assert.ok(later.tension>600000);
 });

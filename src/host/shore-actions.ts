@@ -7,6 +7,9 @@ import { id } from './validation.ts';
 export function applyShoreAction(save:Save,action:Action):boolean {
   const shore=save.shore;
   switch(action.type){
+    case 'shore.companion':
+      requireState(action.companion===null||action.companion==='A002'&&!!save.catalog.A002,'先在图鉴里遇见刀盾狗');
+      shore.companion=action.companion;return true;
     case 'shore.read':
       requireState(shore.story==='bottle','这封信已经读过，或还未发现');
       requireState(save.journey.region==='L01','回到摸鱼塘后再找贝邮');

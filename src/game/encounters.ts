@@ -5,10 +5,11 @@ import type { Catch, Encounter, Mode } from './engine.ts';
 import { modifiers } from './gear.ts';
 import { bait, currentTide } from './progression.ts';
 import type { BaitId, Journey, Tide } from './progression.ts';
+import type { AutoGoal } from './auto-fishing.ts';
 import { spotWeights, spotPreference } from './shore.ts';
 import type { SpotId } from './shore.ts';
 export type EncounterSource = 'random' | 'pity' | 'target' | 'invitation' | 'tutorial' | 'legacy';
-export interface EncounterMeta { source:EncounterSource; region:RegionId; bait:BaitId; tide:Tide; spot?:SpotId }
+export interface EncounterMeta { source:EncounterSource; region:RegionId; bait:BaitId; tide:Tide; spot?:SpotId; autoGoal?:AutoGoal }
 export function weighted<T>(items: readonly T[], weight:(item:T)=>number, random:()=>number): T {
   const total=items.reduce((sum,item)=>sum+weight(item),0);
   if (!(total>0)) throw new Error('没有匹配的候选，鱼饵未消耗');
@@ -26,13 +27,14 @@ export function preferenceAvailable(regionId:RegionId, baitId:BaitId): boolean {
   const tag=bait(baitId).tag;
   return !tag || SPECIES.some(item=>item.region===regionId&&item.tags.includes(tag));
 }
-export function rollEncounter(seed:number,id:string,mode:Mode,journey:Journey,discovered:readonly SpeciesId[],spot?:SpotId): Encounter & {meta:EncounterMeta} {
+export function rollEncounter(seed:number,id:string,mode:Mode,journey:Journey,discovered:readonly SpeciesId[],spot?:SpotId,autoGoal?:AutoGoal): Encounter & {meta:EncounterMeta} {
   const location=journey.region, baitId=journey.bait, tide=currentTide(journey);
   const pool=SPECIES.filter(item=>item.region===location && item.kind!=='guest');
   const missing=pool.filter(item=>!discovered.includes(item.id));
   if (!preferenceAvailable(location,baitId)) throw new Error('这个钓点没有偏好这种鱼饵的鱼，请换一种饵');
   const tag=bait(baitId).tag;
   const preference=(item:Species)=>(tag&&item.tags.includes(tag)?2:1)*spotPreference(item,spot);
+  const goalWeight=(item:Species)=>autoGoal==='catalog'&&!discovered.includes(item.id)?3:1;
   const pick=randomStream(seed,'entry-v2');
   let def:Species, source:EncounterSource='random';
   if (baitId==='B08') {
@@ -50,12 +52,12 @@ export function rollEncounter(seed:number,id:string,mode:Mode,journey:Journey,di
   } else if (journey.dryStreak[location]>=8 && missing.length) {def=weighted(missing,preference,pick);source='pity';}
   else {
     const probabilities=categoryProbabilities(location,baitId,tide,spot);
-    const category=weighted([0,1,2] as const,item=>probabilities[item]!,randomStream(seed,'category-v2'));
+    const category=weighted([0,1,2] as const,item=>probabilities[item]!*(autoGoal==='catalog'&&missing.some(def=>def.kind===['fish','abstract','relic'][item])?2:1),randomStream(seed,'category-v2'));
     const candidates=pool.filter(item=>item.kind===(['fish','abstract','relic'] as const)[category]);
     if (category===0) {
-      const rarity=weighted([1,2,3,4],item=>[60,26,11,3][item-1]!,randomStream(seed,'rarity-v2'));
-      def=weighted(candidates.filter(item=>item.rarity===rarity),preference,pick);
-    } else def=weighted(candidates,item=>item.poolWeight,pick);
+      const rarity=weighted([1,2,3,4],item=>[60,26,11,3][item-1]!*(autoGoal==='catalog'&&missing.some(def=>def.kind==='fish'&&def.rarity===item)?2:1),randomStream(seed,'rarity-v2'));
+      def=weighted(candidates.filter(item=>item.rarity===rarity),item=>preference(item)*goalWeight(item),pick);
+    } else def=weighted(candidates,item=>item.poolWeight*goalWeight(item),pick);
   }
   const sizes=randomStream(seed,'size-v2');
   let lengthMm:number|null=null,weightG:number|null=null,quality:number|null=null,variant:Variant|null=null;
@@ -76,5 +78,5 @@ export function rollEncounter(seed:number,id:string,mode:Mode,journey:Journey,di
     caughtAt:'',isNew:false,isRecord:false,isNewVariant:false,locked:false};
   return {catch:catchItem,challenge:{seed:Math.floor(behavior()*4294967296),waitTicks:40+Math.floor(behavior()*81),
     pattern:def.pattern,mode:['target','invitation','tutorial'].includes(source)?'guided':mode,rulesVersion:2,modifiers:modifiers(journey.loadout),size:quality??500},
-    meta:{source,region:location,bait:baitId,tide,...spot?{spot}:{}}};
+    meta:{source,region:location,bait:baitId,tide,...spot?{spot}:{},...autoGoal?{autoGoal}:{}}};
 }

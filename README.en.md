@@ -4,7 +4,7 @@
 
 A relaxing fishing and collection plugin for DeepSeek Harness (DSH) Web. Head to the shore and cast a line, or enable automatic fishing and let your character wait for a catch while you use DSH.
 
-**Current main branch: `main` · `0.3.0-preview.2`**. Explore four walkable 3D shores with detailed 2D characters and a pixel-art paper interface. You can build and install the plugin locally from source; it has not been published to npm.
+**Current main branch: `main` · `0.3.0-preview.3`**. Explore four walkable 3D shores with detailed 2D characters and a pixel-art paper interface. You can build and install the plugin locally from source; it has not been published to npm.
 
 The original pixel-art version, `0.1.0-rc.11`, is preserved in full on [archive/pixel-v1-rc11](https://github.com/Nath-Vikky/dsh-fisher/tree/archive/pixel-v1-rc11).
 
@@ -36,7 +36,7 @@ The game UI currently uses Chinese. The English instructions below include the C
 ### Manual fishing
 
 1. Open “摸鱼海岸” from the floating launcher. Drag the joystick at the bottom right to walk toward the water, or use “去哪里” (Where to?) to walk to a fishing spot automatically.
-2. Near a fishing spot, select “在这里钓鱼” (Fish here) on the left, then “抛竿” (Cast). Both spots on the same shore share that area's catch pool and equipment.
+2. Near a fishing spot, select “在这里钓鱼” (Fish here) on the left, then “抛竿” (Cast). At Idle Pond, the shallow cove favors ordinary fish, while the pier favors curiosities and old objects. Water cues and the preparation panel explain the difference.
 3. When the float signals a bite, select “提竿” (Set the hook). Hold the reel button and release it when tension rises. Assisted line release is enabled by default; you can also use “点击切换收线” (Click to toggle reeling).
 4. When the catch popup appears, click the empty area outside it or “留下并继续” (Keep and continue) to add the catch to your inventory. You can also sell, release, or recycle it. If the inventory is full, you must resolve the catch first.
 
@@ -44,9 +44,15 @@ Focus the scene or joystick before using the arrow keys / WASD. Manual fishing p
 
 ### Automatic fishing
 
-Open “托管” (Auto) on the right and enable “自动钓鱼” (Automatic fishing). Your character walks back to the selected fishing spot and uses your current bait and equipment. Fishing progresses with DSH model responses and tool activity. Catches go into your inventory or collection automatically, and a summary is available when you return. Automatic fishing pauses if the inventory is full or bait runs out.
+Open “托管” (Auto) on the right and enable “自动钓鱼” (Automatic fishing). Your character walks back to the selected fishing spot and uses your current bait and equipment. Fishing progresses with DSH model responses and tool activity. By default, catches go into your inventory or collection automatically, with a summary when you return. Choose “随心钓” (Relax), “补图鉴” (Collection), “攒壳币” (Coins), or “找线索” (Clues). Collection favors undiscovered entries at the cost of longer waits. Coins sells eligible duplicate ordinary fish in their original appearance, preserving first discoveries, records, and special appearances. Clues waits for your input after a discovery. Goal changes apply to the next cast. Automatic fishing pauses if the inventory is full or bait runs out.
 
 Select “接管这一竿” (Take over this cast) to switch to manual fishing while retaining the catch and progress already accumulated. Automatic fishing is off by default and is independent of work supplies. It can continue while the game window is closed, but no offline time is credited after you exit DSH or qualifying activity stops.
+
+### Shore stories and companions
+
+Fish near the shallow cove at Idle Pond to find a message in a bottle. Follow it in “岸边故事” (Shore stories), talk to Beiyou, recover an old object, and contribute ordinary fish to build a wind chime that stays in the 3D scene. The story has no time limit.
+
+After discovering Knife-and-Shield Dog (刀盾狗), invite it through “岸边故事 → 岸边伙伴” (Shore stories → Companions). It follows you and guards your line once per cast during a burst or dangerous tension. Companion changes apply to the next cast.
 
 ### Menus and visitors
 
@@ -56,7 +62,8 @@ Select “接管这一竿” (Take over this cast) to switch to manual fishing w
 | 背包 · Inventory | Inspect catches, lock items, sell, release, or organize them |
 | 码头 · Dock | Change shores, bait, equipment, and tide phases; manage local saves |
 | 手记 · Journal | Accept requests, view achievements, meet visitors, and arrange displays |
-| 托管 · Auto | Enable automatic fishing, view progress and summaries, or take over the current cast |
+| 托管 · Auto | Choose a goal, enable automatic fishing, view summaries, or take over the current cast |
+| 岸边故事 · Shore stories | Follow the Idle Pond story, prepare building materials, and invite a companion |
 | 设置 · Settings | Adjust the window, theme, text size, motion, rendering load, and sound |
 
 Approach a visitor and select “交谈” (Talk), or choose “聊一句” (Chat) from their journal page, to open a conversation with portraits on both sides. Use “再聊一句” (Chat more) and “继续” (Continue) to advance. Press Esc or select “结束交谈” (End conversation) to return. Casual chat does not consume items or change relationship progress.
@@ -111,6 +118,8 @@ Game progress and the plugin's enabled state are stored on the host under `$DSH_
 Upgrading an older save preserves the original file and retains collected items, balances, and records. Exporting a copy before updating is recommended. If saving fails, the game pauses and prompts you to retry. A sudden power loss may roll back the most recent unsaved actions.
 
 **The plugin makes no additional model requests and does not read chat content, reasoning content, tool arguments, or token counts.** Automatic fishing and work supplies use only DSH activity metadata. There are no in-app purchases, player trading, multiplayer features, or leaderboards.
+
+Newer saves cannot be opened directly by an older branch. Use a backup from before the upgrade when rolling back.
 
 ## Performance and compatibility
 
