@@ -4,7 +4,7 @@
 
 A relaxing fishing and collection plugin for DeepSeek Harness (DSH) Web. Head to the shore and cast a line, or enable automatic fishing and let your character wait for a catch while you use DSH.
 
-**Current main branch: `main` · `0.3.0-preview.1`**. Explore four walkable 3D shores with detailed 2D characters and a pixel-art paper interface. You can build and install the plugin locally from source; it has not been published to npm.
+**Current main branch: `main` · `0.3.0-preview.2`**. Explore four walkable 3D shores with detailed 2D characters and a pixel-art paper interface. You can build and install the plugin locally from source; it has not been published to npm.
 
 The original pixel-art version, `0.1.0-rc.11`, is preserved in full on [archive/pixel-v1-rc11](https://github.com/Nath-Vikky/dsh-fisher/tree/archive/pixel-v1-rc11).
 

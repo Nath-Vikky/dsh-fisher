@@ -3,7 +3,7 @@ import type {WorldProps} from './contracts.ts';
 import {CoastWorld} from './renderer.ts';
 import type {WorldState} from './renderer.ts';
 import {COASTS} from './regions.ts';
-import {waterClue} from '../../game/shore.ts';
+import {waterClue,shoreVisitor} from '../../game/shore.ts';
 import {currentTide} from '../../game/progression.ts';
 import {createCoastIcon} from '../coast-icons.tsx';
 
@@ -47,7 +47,7 @@ export function createWorld(React:typeof ReactTypes){
     return <div className="dsh-fisher-world" onKeyDown={event=>key(event,true)} onKeyUp={event=>key(event,false)} onBlur={event=>{if(!event.currentTarget.contains(event.relatedTarget))reset();}}>
       <canvas key={`${coast.id}:${attempt}`} ref={canvas} tabIndex={0} role="img" aria-label={`可以走动的${coast.name}海岸，使用摇杆或方向键移动`} onPointerDown={event=>event.currentTarget.focus()} data-render-state="loading"/>
       {!locked&&state.ready&&!error&&<><div className="dsh-fisher-world-waypoints" aria-label="海岸导航">
-        {navigation&&<div className="dsh-fisher-world-destinations">{(['pier','cove','guest'] as const).filter(id=>id!=='guest'||props.data.life.visitor).map(id=><button key={id} onClick={()=>{host.current?.go(id);setNavigation(false);}}>{PLACES[id].name}</button>)}</div>}
+        {navigation&&<div className="dsh-fisher-world-destinations">{(['pier','cove','guest'] as const).filter(id=>id!=='guest'||shoreVisitor(props.data.shore,coast.id,props.data.life.visitor)).map(id=><button key={id} onClick={()=>{host.current?.go(id);setNavigation(false);}}>{PLACES[id].name}</button>)}</div>}
         <button className="dsh-fisher-navigation-button" aria-expanded={navigation} onClick={()=>setNavigation(value=>!value)}><Icon name="compass"/><span>{state.destination?`前往${PLACES[state.destination].name}`:'去哪里'}</span></button>
       </div><div className="dsh-fisher-joystick-wrap"><button className="dsh-fisher-joystick" aria-label="移动摇杆" title="鼠标按住拖动，也可用方向键或 WASD"
         onPointerDown={event=>{if(!event.isPrimary||event.button!==0)return;drag.current=event.pointerId;event.currentTarget.setPointerCapture(event.pointerId);event.currentTarget.focus();pointer(event);}}

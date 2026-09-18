@@ -100,4 +100,9 @@ export const paperUiStyles = `
 .dsh-fisher-spot-picker button[aria-pressed=true]{background:#c5d9bd;box-shadow:inset 0 -3px #719994}
 .dsh-fisher-spot-picker small{font-size:11px;font-weight:normal}
 .dsh-fisher-spot-picker p{font-size:12px;line-height:1.7;margin:8px 0}
+.dsh-fisher .dsh-fisher-hud-story{position:absolute;left:13px;top:143px;z-index:5;display:flex;align-items:center;gap:5px;padding:7px 9px;background:var(--fisher-paper);font-size:11px;box-shadow:2px 2px var(--fisher-shade)}
+.dsh-fisher-hud-story svg{width:17px;height:17px}.dsh-fisher-hud-story[data-notice=true]:after{content:'!';display:grid;place-items:center;width:14px;height:14px;background:var(--fisher-pink);color:#fff;border-radius:50%}
+.dsh-fisher-panel:has(>.dsh-fisher-conversation-layer:not([inert])) .dsh-fisher-hud-story{visibility:hidden}
+.dsh-fisher-shore-journal{display:grid;gap:10px}.dsh-fisher-shore-journal p,.dsh-fisher-shore-journal h3{margin:0}.dsh-fisher-story-mark{font-size:36px;color:#5b8f83}.dsh-fisher-shore-next{padding:10px;background:#dce4c5;font-size:13px}.dsh-fisher-donation-list{display:grid;gap:6px}.dsh-fisher-donation-list button[aria-pressed=true]{background:#c5d9bd}
+@container(max-height:520px){.dsh-fisher .dsh-fisher-hud-story{top:191px}}
 `;

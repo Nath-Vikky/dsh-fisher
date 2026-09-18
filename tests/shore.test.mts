@@ -9,7 +9,8 @@ import { SaveStore } from '../src/host/store.ts';
 import { FisherService } from '../src/host/service.ts';
 import { encodeSave,decodeSave } from '../src/host/save-codec.ts';
 import { categoryProbabilities,rollEncounter } from '../src/game/encounters.ts';
-import type { Action,ActionRequest } from '../src/protocol.ts';
+import type { Action,ActionRequest,InputRequest } from '../src/protocol.ts';
+import { step } from '../src/game/engine.ts';
 
 const root=resolve(import.meta.dirname,'../tmp');
 function request(s:FisherService,action:Action):ActionRequest {
@@ -50,4 +51,41 @@ test('water clues change actual encounter odds while directed catches and other 
   j.bait='B01';j.target=null;
   let different=0;for(let seed=0;seed<100;seed++)if(rollEncounter(seed,'a','assisted',j,[],'cove').catch.speciesId!==rollEncounter(seed,'a','assisted',j,[],'pier').catch.speciesId)different++;
   assert.ok(different>10);
+});
+
+async function land(s:FisherService,spot:'pier'|'cove') {
+  await send(s,{type:'shore.spot',spot});await send(s,{type:'cast.begin',mode:'assisted'});
+  for(let tries=0;s.snapshot().active&&tries<100;tries++){
+    const cast=s.snapshot().active!;
+    if(cast.simulation.phase==='recovery'){await send(s,{type:'cast.recover',castId:cast.id,ownerEpoch:cast.ownerEpoch});break;}
+    let sim={...cast.simulation};const edges:InputRequest['edges']=[];
+    while(sim.tick<cast.simulation.tick+80&&!['caught','escaped','recovery','bite'].includes(sim.phase)){
+      if(!sim.reel)edges.push({tick:sim.tick+1,reel:true});sim=step(sim,cast.challenge,true);
+    }
+    const {action:_,...envelope}=request(s,{type:'save.retry'});
+    await s.mutate({...envelope,castId:cast.id,ownerEpoch:cast.ownerEpoch,expectedCastRevision:cast.castRevision,fromTick:cast.simulation.tick,inputCursor:cast.inputCursor,toTick:sim.tick,edges,command:sim.phase==='bite'?'hook':'checkpoint'},true);
+  }
+  const item=s.snapshot().pending;assert.ok(item);await send(s,{type:'catch.resolve',catchId:item.id,choice:'keep'});
+}
+test('bottle story persists through the catch loop and the building spends explicitly donated fish only once',async()=>{
+  const save=emptySave();save.journey.totalCaught=2;
+  for(let i=0;i<2;i++)save.inventory.push({...rollEncounter(50,`wood-${i}`,'assisted',save.journey,[]).catch,caughtAt:new Date().toISOString(),isRecord:true});
+  await fixture(async(s)=>{
+    await assert.rejects(send(s,{type:'shore.read'}),/还未发现/);
+    await land(s,'cove');assert.equal(s.snapshot().shore.story,'quiet');assert.equal(s.snapshot().shore.searched,1);
+    await land(s,'cove');assert.equal(s.snapshot().shore.story,'bottle');
+    const reloaded=decodeSave(await s.exportSave()).save;assert.equal(reloaded.shore.story,'bottle');
+    await send(s,{type:'shore.read'});await land(s,'cove');assert.equal(s.snapshot().shore.story,'charted');
+    await land(s,'pier');assert.equal(s.snapshot().shore.story,'recovered');
+    await assert.rejects(send(s,{type:'shore.donate',catchId:'wood-0'}),/单独确认/);
+    await send(s,{type:'inventory.lock',catchId:'wood-0',locked:true});
+    await assert.rejects(send(s,{type:'shore.donate',catchId:'wood-0',confirmed:true}),/解锁/);
+    await send(s,{type:'inventory.lock',catchId:'wood-0',locked:false});
+    const donation=request(s,{type:'shore.donate',catchId:'wood-0',confirmed:true});await s.mutate(donation,false);await s.mutate(donation,false);
+    assert.equal(s.snapshot().shore.timber,1);await send(s,{type:'shore.donate',catchId:'wood-1',confirmed:true});
+    const before=s.snapshot(),build=request(s,{type:'shore.build'});await s.mutate(build,false);await s.mutate(build,false);
+    assert.equal(s.snapshot().coins,before.coins-30);assert.equal(s.snapshot().shore.story,'built');assert.equal(s.snapshot().shore.timber,0);
+    assert.deepEqual(s.snapshot().catalog,before.catalog);await assert.rejects(send(s,{type:'shore.build'}),/备齐/);
+    assert.equal(decodeSave(await s.exportSave()).save.shore.story,'built');
+  },save);
 });

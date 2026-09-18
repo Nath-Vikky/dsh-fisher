@@ -4,7 +4,8 @@ import type { Catch } from '../game/engine.ts';
 import { isRegionId, isSpeciesId, species } from '../game/content.ts';
 import type { SpeciesId } from '../game/content.ts';
 import { verifyContent } from '../game/content-check.ts';
-import { isSpot } from '../game/shore.ts';
+import { applyShoreAction } from './shore-actions.ts';
+import { isSpot, recordShoreCatch } from '../game/shore.ts';
 import { rollEncounter } from '../game/encounters.ts';
 import { gear, isGearId } from '../game/gear.ts';
 import { bait, consumeOverride, finishTide, isBaitId, isInventorySpecies, isTide, levelInfo, regionUnlocked } from '../game/progression.ts';
@@ -246,7 +247,7 @@ export class FisherService {
   }
   private applyAction(save: Save, { action, clientId }: ActionRequest): void {
     object(action);
-    if (applyLifeAction(save, action)) return;
+    if (applyLifeAction(save, action)||applyShoreAction(save,action)) return;
     switch (action.type) {
       case 'shore.spot': {
         requireState(!save.active&&!save.pending,'请先结束当前这一竿');
@@ -469,6 +470,7 @@ export class FisherService {
     } else if (cast.simulation.phase==='recovery') {cast.paused=true;cast.simulation.reel=false;}
   }
   private completeCatch(save:Save,cast:PrivateCast): void {
+    recordShoreCatch(save.shore,cast.meta);
     const item=cast.catch,def=species(item.speciesId),prior=save.catalog[item.speciesId],journey=save.journey;
     const lengthRecord=!!prior&&item.lengthMm!==null&&item.lengthMm>(prior.bestLengthMm??0);
     item.isNew=!prior;
