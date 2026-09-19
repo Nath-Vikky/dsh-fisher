@@ -4,7 +4,7 @@
 
 A relaxing fishing and collection plugin for DeepSeek Harness (DSH) Web. Head to the shore and cast a line, or enable automatic fishing and let your character wait for a catch while you use DSH.
 
-**Current main branch: `main` · `0.3.0-preview.5`**. Explore four walkable 3D shores with detailed 2D characters and a pixel-art paper interface. You can build and install the plugin locally from source; it has not been published to npm.
+**Current main branch: `main` · `0.3.0-preview.6`**. Explore four walkable 3D shores with detailed 2D characters and a pixel-art paper interface. You can build and install the plugin locally from source; it has not been published to npm.
 
 The original pixel-art version, `0.1.0-rc.11`, is preserved in full on [archive/pixel-v1-rc11](https://github.com/Nath-Vikky/dsh-fisher/tree/archive/pixel-v1-rc11).
 
@@ -35,8 +35,8 @@ The game UI currently uses Chinese. The English instructions below include the C
 
 ### Manual fishing
 
-1. Open “摸鱼海岸” from the floating launcher. Hold and drag an empty area of the scene to reveal a joystick and walk toward the water, or use “去哪里” (Where to?) to walk to a fishing spot automatically.
-2. Near a fishing spot, select “在这里钓鱼” (Fish here) on the left, then “抛竿” (Cast). At Idle Pond, the shallow cove favors ordinary fish, while the pier favors curiosities and old objects. Water cues and the preparation panel explain the difference.
+1. Open “摸鱼海岸” from the floating launcher. Hold and drag an empty area of the scene to reveal a joystick and walk toward the water, or use “去哪里” (Where to?) above the save button at the bottom left to walk to a fishing spot automatically.
+2. Near a fishing spot, select “在这里钓鱼” (Fish here) at the bottom center, then “抛竿” (Cast). At Idle Pond, the shallow cove favors ordinary fish, while the pier favors curiosities and old objects. Water cues and the preparation panel explain the difference.
 3. When the float signals a bite, select “提竿” (Set the hook). Hold the reel button and release it when tension rises. Assisted line release is enabled by default; you can also use “点击切换收线” (Click to toggle reeling).
 4. When the catch popup appears, click the empty area outside it or “留下并继续” (Keep and continue) to add the catch to your inventory. You can also sell, release, or recycle it. If the inventory is full, you must resolve the catch first.
 
