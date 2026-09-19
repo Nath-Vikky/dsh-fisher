@@ -71,8 +71,6 @@ export class Scenery {
     this.garden();
     this.map.trees.forEach(([x,z,s],index)=>this.tree(x,z,s,index===0));
     this.lighthouse();
-    this.add('box','woodLight',.85,.48,-.05,1.35,.12,.5);this.add('box','woodLight',.85,.82,-.29,1.35,.42,.09);
-    for(const x of [.35,1.35])this.add('box','wood',x,.24,-.05,.1,.5,.4);
     this.add('trunk','wood',.56,.54,2.7,.1,1.05,.1);this.add('soft','cream',.56,.94,2.7,.66,.36,.09);this.add('box','blue',.56,.95,2.76,.35,.045,.025,0,-.18);
     this.add('box','wood',-1,.5,-.68,.12,.9,.12);this.add('soft','blue',-1,1,-.68,.42,.36,.35);this.add('box','ink',-1,1,-.493,.24,.045,.02);
   }

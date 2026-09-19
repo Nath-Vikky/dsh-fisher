@@ -12,7 +12,7 @@ export function createWorld(React:typeof ReactTypes){
   return function World(props:WorldProps){
     const coast=COASTS[props.data.journey.region],PLACES=coast.places;
     const canvas=React.useRef<HTMLCanvasElement>(null),host=React.useRef<CoastWorld>(),latest=React.useRef(props);latest.current=props;
-    const [state,setState]=React.useState<WorldState>({near:null,walking:false,destination:null,spot:'pier',ready:false});
+    const [state,setState]=React.useState<WorldState>({near:null,walking:false,destination:null,spot:'pier',ready:false,guestActivity:'在岸边等你'});
     const [error,setError]=React.useState(false),[attempt,setAttempt]=React.useState(0);
     const [stick,setStick]=React.useState<{left:number;top:number;x:number;y:number}|null>(null),[hasDragged,setHasDragged]=React.useState(false);
     const [navigation,setNavigation]=React.useState(false);
@@ -64,7 +64,7 @@ export function createWorld(React:typeof ReactTypes){
         <button className="dsh-fisher-navigation-button" aria-expanded={navigation} onClick={()=>setNavigation(value=>!value)}><Icon name="compass"/><span>{state.destination?`前往${PLACES[state.destination].name}`:'去哪里'}</span></button>
       </div>{stick&&<div className="dsh-fisher-floating-stick" aria-hidden="true" style={{left:stick.left,top:stick.top}}><span style={{transform:`translate(${stick.x}px,${stick.y}px)`}}>＋</span></div>}
         {!hasDragged&&<span className="dsh-fisher-move-hint">拖动空白处移动</span>}
-        <div className="dsh-fisher-world-interaction" aria-live="polite">{state.near==='guest'?<button className="dsh-fisher-primary" onClick={props.onGuest}><Icon name="note"/><span>交谈</span></button>:state.near?<button className="dsh-fisher-primary" onClick={fish}><Icon name="fish"/><span>在这里钓鱼</span><small>{PLACES[state.near].name}{coast.id==='L01'?` · ${waterClue(state.near,currentTide(props.data.journey)).title}`:''}</small></button>:null}</div>
+        <div className="dsh-fisher-world-interaction" aria-live="polite">{state.near==='guest'?<button className="dsh-fisher-primary" onClick={props.onGuest}><Icon name="note"/><span>交谈</span><small>{state.guestActivity}</small></button>:state.near?<button className="dsh-fisher-primary" onClick={fish}><Icon name="fish"/><span>在这里钓鱼</span><small>{PLACES[state.near].name}{coast.id==='L01'?` · ${waterClue(state.near,currentTide(props.data.journey)).title}`:''}</small></button>:null}</div>
       </>}
       {(!state.ready||error)&&<div className="dsh-fisher-world-loading" role="status"><span className="dsh-fisher-world-loading-mark">≈</span><strong>{error?'海岸暂时没有展开':'正在准备海岸'}</strong><small>{error?'可以重试，或使用轻量画面继续。':'整理小屋、码头与光线…'}</small>{error&&<><button onClick={()=>setAttempt(v=>v+1)}>重新展开</button><button onClick={props.onFallback}>使用轻量画面</button></>}</div>}
     </div>;

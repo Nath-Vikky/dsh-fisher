@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {PLACES,POND,SPAWN,distance,move,route,screenDirection,walkable} from '../src/client/world/map.ts';
+import {furnishedMap} from '../src/client/world/living-shore.ts';
 import {COASTS} from '../src/client/world/regions.ts';
 import {playerFacing,playerMotion} from '../src/client/player-motion.ts';
 
@@ -30,7 +31,7 @@ test('automatic paths reach both fishing spots without cutting house corners',()
 });
 
 test('every coast connects its spawn, two fishing spots and visitor around solid obstacles',()=>{
-  for(const map of Object.values(COASTS)){
+  for(const map of [...Object.values(COASTS),...Object.values(COASTS).map(furnishedMap)]){
     const places=[map.spawn,...Object.values(map.places)];
     for(const from of places)for(const target of places){
       assert.ok(walkable(from,map),`${map.id} invalid place ${JSON.stringify(from)}`);

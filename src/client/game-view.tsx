@@ -24,6 +24,7 @@ import { createCoastIcon } from './coast-icons.tsx';
 import { createCoastBadge } from './coast-badge.tsx';
 import { createConversation } from './conversation.tsx';
 import { createShoreJournal, BOTTLE_CONVERSATION } from './shore-journal.tsx';
+import {collectionRemark} from '../game/shore-life.ts';
 import { shoreVisitor } from '../game/shore.ts';
 import { createShoreSpots } from './shore-spots.tsx';
 import {retainConversationArt} from './portrait-art.tsx';
@@ -144,7 +145,7 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
     const mood = pending ? '今天的海，回了一封信' : automatic ? data?.autoFishing.enabled&&data.autoFishing.working?'你忙你的，海岸慢慢钓':'这份等待，下次接着来' : view.paused && cast ? '这一竿，等你回来' : phase === 'bite' ? '浮漂动了 · 现在提竿'
       : phase === 'fighting' ? warning(sim!, cast!.challenge) : phase === 'casting' ? '轻轻把线送出去' : phase === 'waiting' ? '等一阵涟漪' : '留一点时间给风，也给自己。';
     const visitor=currentGuest?guest(currentGuest):null;
-    const visitorLine=visitor?(pending?visitor.lines[pending.isRecord?8:pending.isNew?6:7]:(automatic?!data?.autoFishing.working:view.paused&&cast)?visitor.lines[9]:visitor.lines[data!.life.guests[visitor.id].stage===3?10:2]):null;
+    const visitorLine=visitor?(pending?visitor.lines[pending.isRecord?8:pending.isNew?6:7]:(automatic?!data?.autoFishing.working:view.paused&&cast)?visitor.lines[9]:collectionRemark(data!,visitor.id)??visitor.lines[data!.life.guests[visitor.id].stage===3?10:2]):null;
     const fishingPanel=(<section className="dsh-fisher-play-card" aria-label="钓鱼操作">
           {data&&(!worldMode||!cast||automatic||data.autoFishing.enabled)&&<Automatic.Controls compact data={data} controller={controller} disabled={blocked} onHistory={()=>setAutoHistory(true)}/>}
           {pending ? <p>新相遇，慢慢看。</p> : data&&(automatic||!cast&&data.autoFishing.enabled)?<Automatic.Progress data={data} controller={controller} disabled={blocked} onCancel={()=>setCancelConfirm(true)} onHarbor={()=>changeTab('harbor')}/> : cast ? <>

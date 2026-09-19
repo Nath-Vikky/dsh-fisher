@@ -81,7 +81,7 @@ export class SpriteActor {
       this.sprite.scale.set(height*source.width/source.height,height*(this.visitor?1:motion.stretch),1);
       texture.repeat.x=this.right?1:-1;texture.offset.x=this.right?0:1;
     }
-    this.sprite.visible=!!texture;this.sprite.position.y=this.visitor?0:motion.bob;
+    this.sprite.visible=!!texture;this.sprite.position.y=this.visitor?(!reduced&&pose==='walk'?Math.abs(Math.sin(time*5))*.045:0):motion.bob;
     this.material.rotation=this.visitor?0:motion.rotation;
     const fishing=!this.visitor&&['cast','hold','reel'].includes(pose);this.rod.visible=fishing;
     if(!fishing)return;
