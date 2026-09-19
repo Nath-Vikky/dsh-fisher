@@ -108,6 +108,7 @@ export const paperUiStyles = `
 .dsh-fisher-shore-tabs{display:flex;gap:8px}.dsh-fisher-shore-tabs button{flex:1}.dsh-fisher-shore-tabs button[aria-pressed=true]{background:#c5d9bd}
 .dsh-fisher-companion-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.dsh-fisher-companion-options button{display:grid;justify-items:center;gap:3px;padding:6px 3px}.dsh-fisher-companion-options img{width:44px;height:44px;object-fit:contain}.dsh-fisher-companion-options strong{font-size:12px}.dsh-fisher-companion-options small{font-size:10px}.dsh-fisher-companion-options button[aria-pressed=true]{background:#c5d9bd}.dsh-fisher-companion-hint{position:absolute;bottom:calc(100% + 8px);left:0;right:0;text-align:center;background:#f5edcff0;border:1px solid #b7a68a;padding:7px;color:#4c485c;font-size:11px;line-height:1.45;pointer-events:none}.dsh-fisher-companion-portrait{display:block;max-width:100%;width:100px;height:100px;object-fit:contain;margin:auto}
 ${activitySwitchStyles}
+.dsh-fisher-picnic-choices{display:grid;grid-template-columns:1fr 1fr;gap:8px}.dsh-fisher-adventures label{display:grid;gap:5px;font-size:12px}.dsh-fisher-adventures select{width:100%;min-width:0}.dsh-fisher-adventures small{line-height:1.65}.dsh-fisher-adventures .dsh-fisher-shore-tabs button{padding:8px 3px;font-size:12px}
 ${autoFishingStyles}
 ${workSupplyStyles}
 `;

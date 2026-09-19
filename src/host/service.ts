@@ -5,6 +5,8 @@ import { isRegionId, isSpeciesId, species } from '../game/content.ts';
 import type { SpeciesId } from '../game/content.ts';
 import { verifyContent } from '../game/content-check.ts';
 import { applyShoreAction } from './shore-actions.ts';
+import {applyAdventureAction} from './adventure-actions.ts';
+import {legendEligible,legendPause,recordAdventureCatch} from '../game/adventures.ts';
 import { isSpot, recordShoreCatch } from '../game/shore.ts';
 import {recordRegionalCatch} from '../game/regional-stories.ts';
 import {companionHint} from '../game/companions.ts';
@@ -28,6 +30,7 @@ import type { Mode } from '../game/engine.ts';
 export { ActionError } from './actions-common.ts';
 
 export const workClock = (): WorkTime => ({ wall: Date.now(), mono: Math.floor(performance.now()) });
+const goalPause=(save:Save):string|null=>save.autoFishing.goal==='clues'?cluePause(save.journey.region,save.shore):save.autoFishing.goal==='legend'?legendPause(save.adventures,save.journey):null;
 
 function fingerprint(value: unknown): string {
   const stable = (item: unknown): string => Array.isArray(item) ? `[${item.map(stable).join(',')}]`
@@ -61,12 +64,12 @@ export class FisherService {
   subscribe(listener: () => void): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   snapshot(): Bootstrap {
     const { active } = this.save;
-    const reason=this.save.autoFishing.goal==='clues'&&!active&&!this.save.pending?cluePause(this.save.journey.region,this.save.shore):this.save.autoFishing.reason;
+    const reason=!active&&!this.save.pending?goalPause(this.save)??this.save.autoFishing.reason:this.save.autoFishing.reason;
     return structuredClone({ protocolVersion: 1, version: VERSION, generation: this.generation, revision: this.save.revision,
       saveId: this.save.id, gameplayAvailable: this.store.pluginEnabled && !this.stopped && !this.store.issue && !this.writeError,
       issue: this.store.issue ?? (this.writeError ? '保存没有完成，已暂停；请重试保存' : null),
       coins: this.save.coins, tokens: this.save.tokens, research: this.save.research, experience: this.save.experience,
-      released: this.save.released, inventory: this.save.inventory, catalog: this.save.catalog, journey:this.save.journey,shore:this.save.shore,
+      released: this.save.released, inventory: this.save.inventory, catalog: this.save.catalog, journey:this.save.journey,shore:this.save.shore,adventures:this.save.adventures,
       work: workView(this.save.work, this.clock().wall), life: this.save.life,storage:{canManage:this.store.canManage},
       autoFishing:{...this.save.autoFishing,reason,working:!reason&&this.observingWork&&this.save.autoFishing.enabled&&Object.values(this.runtime.roots).some(root=>root.until>this.clock().mono)},
       active: active ? { id: active.id, owner: active.owner, ownerEpoch: active.ownerEpoch, leaseUntil: active.leaseUntil,
@@ -250,7 +253,8 @@ export class FisherService {
   }
   private applyAction(save: Save, { action, clientId }: ActionRequest): void {
     object(action);
-    if (applyLifeAction(save, action)||applyShoreAction(save,action)) return;
+    if(['location.select','bait.select','bait.buy','tide.choose','legend.arm','legend.hear'].includes(action.type))save.autoFishing.reason=null;
+    if (applyLifeAction(save, action)||applyShoreAction(save,action)||applyAdventureAction(save,action)) return;
     switch (action.type) {
       case 'shore.spot': {
         requireState(!save.active&&!save.pending,'请先结束当前这一竿');
@@ -402,10 +406,11 @@ export class FisherService {
     requireState(journey.bait==='B01'||journey.bait==='B08'||(journey.baits[journey.bait]??0)>0,'鱼饵用完了，请补充或换普通面团');
     if(automatic)save.shore.spots[journey.region]=automaticSpot(save.autoFishing.goal,journey.region,save.shore,Object.keys(save.catalog) as SpeciesId[]);
     let selected:ReturnType<typeof rollEncounter>;
-    try{selected=rollEncounter(seed,castId,mode,journey,Object.keys(save.catalog) as SpeciesId[],save.shore.spots[journey.region],automatic?save.autoFishing.goal:undefined);}
+    try{selected=rollEncounter(seed,castId,mode,journey,Object.keys(save.catalog) as SpeciesId[],save.shore.spots[journey.region],automatic?save.autoFishing.goal:undefined,legendEligible(save.adventures,journey,save.shore.spots[journey.region]));}
     catch(error){throw new ActionError(error instanceof Error?error.message:'没有匹配的候选');}
     if(save.shore.companion==='A002')selected.challenge.guard='A002';
     selected.meta.companion=save.shore.companion;
+    if(selected.meta.source==='legend')save.adventures.legend.armed=false;
     if(journey.bait==='B08')journey.invitations=journey.invitations.filter(item=>item!==selected.catch.speciesId);
     else if(journey.bait!=='B01')journey.baits[journey.bait]!--;
     consumeOverride(journey);
@@ -420,7 +425,7 @@ export class FisherService {
     if(save.pending){save.autoFishing.reason='请先处理待领取的收获';return;}
     while(ms>0){
       if(!save.active){
-        if(save.autoFishing.goal==='clues'){const reason=cluePause(save.journey.region,save.shore);if(reason){save.autoFishing.reason=reason;return;}}
+        {const reason=goalPause(save);if(reason){save.autoFishing.reason=reason;return;}}
         if(save.inventory.length>=240){save.autoFishing.reason='背包已满，整理后自动继续';return;}
         try{this.beginCast(save,'automatic','assisted',true);}
         catch(error){if(!(error instanceof ActionError))throw error;save.autoFishing.reason=error.message;return;}
@@ -442,7 +447,7 @@ export class FisherService {
       save.autoFishing.recent.push(structuredClone(item));save.autoFishing.recent=save.autoFishing.recent.slice(-12);
       save.autoFishing.recentSold=save.autoFishing.recentSold.filter(id=>save.autoFishing.recent.some(item=>item.id===id));
       save.pending=null;
-      if(save.autoFishing.goal==='clues'){const reason=cluePause(save.journey.region,save.shore);if(reason){save.autoFishing.reason=reason;return;}}
+      {const reason=goalPause(save);if(reason){save.autoFishing.reason=reason;return;}}
     }
   }
   private resolveCatch(save: Save, item: Catch, choice: 'sell' | 'release'): void {
@@ -487,6 +492,7 @@ export class FisherService {
   private completeCatch(save:Save,cast:PrivateCast): void {
     recordShoreCatch(save.shore,cast.meta);
     recordRegionalCatch(save.shore.regions,cast.meta,cast.catch);
+    recordAdventureCatch(save.adventures,cast.meta);
     const item=cast.catch,def=species(item.speciesId),prior=save.catalog[item.speciesId],journey=save.journey;
     const lengthRecord=!!prior&&item.lengthMm!==null&&item.lengthMm>(prior.bestLengthMm??0);
     item.isNew=!prior;

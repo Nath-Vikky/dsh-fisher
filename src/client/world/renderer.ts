@@ -17,9 +17,11 @@ import {facilityPoints,nearbyFacility,memorialBuilt} from './facilities.ts';
 import type {DestinationId,FacilityId} from './facilities.ts';
 import {FishingFeedback,fishingMotion} from './fishing-feedback.ts';
 import {currentTide} from '../../game/progression.ts';
+import {ShoreMoments} from './shore-moments.ts';
 
 export interface WorldState {near:DestinationId|null;walking:boolean;destination:DestinationId|null;spot:SpotId;ready:boolean;guestActivity:string}
 const selectedSpot=(data:WorldProps['data'])=>data.active?.setup?.spot??(data.autoFishing.enabled?automaticSpot(data.autoFishing.goal,data.journey.region,data.shore,Object.keys(data.catalog) as SpeciesId[]):data.shore.spots[data.journey.region]);
+const currentVisitor=(data:WorldProps['data'])=>data.adventures.picnic?.region===data.journey.region?data.adventures.picnic.guest:shoreVisitor(data.shore,data.journey.region,data.life.visitor);
 const nextTask=()=>new Promise<void>(resolve=>setTimeout(resolve,0));
 export class CoastWorld {
   private renderer:WebGLRenderer;
@@ -27,6 +29,7 @@ export class CoastWorld {
   private scenery:Scenery;private shoreScene:ShoreScene;private living:LivingShore;private pictures=new ActorTextures();private player=new SpriteActor(this.pictures);private visitor=new SpriteActor(this.pictures,true);private companion=new Companion(this.pictures);private actorKey='';
   private line:Line;private bobber:Mesh;
   private feedback=new FishingFeedback();private facilities:Record<FacilityId,Point>;
+  private moments=new ShoreMoments();
   private options:WorldProps;
   private map:CoastMap;private position:Point;private spot:SpotId='pier';private input:Point={x:0,z:0};
   private path:Point[]=[];private destination:DestinationId|null=null;private frame=0;private last=0;private time=0;
@@ -53,7 +56,7 @@ export class CoastWorld {
     this.scene.matrixAutoUpdate=false;this.content.matrixAutoUpdate=false;
     const sun=new DirectionalLight(light.sun,light.strength);sun.position.set(-5,14,8);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-12;sun.shadow.camera.right=12;sun.shadow.camera.top=12;sun.shadow.camera.bottom=-12;sun.shadow.camera.near=.5;sun.shadow.camera.far=40;sun.shadow.bias=-.0004;sun.shadow.normalBias=.035;
     this.scene.add(new HemisphereLight(light.sky,light.ground,light.ambient),sun,this.content);
-    this.living=new LivingShore(this.pictures,this.map);this.content.add(this.living.group);this.shoreScene=new ShoreScene(this.map.id);this.scenery=new Scenery(this.map);this.content.add(this.shoreScene.group,this.scenery.group,this.player.group,this.visitor.group,this.companion.group);
+    this.living=new LivingShore(this.pictures,this.map);this.content.add(this.living.group,this.moments.group);this.shoreScene=new ShoreScene(this.map.id);this.scenery=new Scenery(this.map);this.content.add(this.shoreScene.group,this.scenery.group,this.player.group,this.visitor.group,this.companion.group);
     this.visitor.group.position.set(places.guest.x+.8,.145,places.guest.z-.5);this.visitor.face(false);
     const lineGeometry=new BufferGeometry();lineGeometry.setAttribute('position',new Float32BufferAttribute(new Float32Array(9),3));
     this.line=new Line(lineGeometry,new LineBasicMaterial({color:'#657c79',transparent:true,opacity:.8}));this.line.frustumCulled=false;this.content.add(this.line);
@@ -82,7 +85,7 @@ export class CoastWorld {
     this.canvas.dataset.renderState='ready';this.publish();this.start();
   }
   private async prepareActors():Promise<void>{
-    const data=this.options.data,visitor=shoreVisitor(data.shore,this.map.id,data.life.visitor),outfit=visitor?data.life.guests[visitor].outfit:'base';
+    const data=this.options.data,visitor=currentVisitor(data),outfit=visitor?data.life.guests[visitor].outfit:'base';
     this.actorKey=`${visitor??''}|${outfit}|${data.journey.loadout.rod}|${this.companionEnabled}`;
     await Promise.all([this.player.prepare(null,'base',data.journey.loadout.rod),this.visitor.prepare(visitor,outfit),this.companion.prepare(this.companionEnabled),this.living.sync(data)]);
     if(this.disposed)return;
@@ -115,12 +118,13 @@ export class CoastWorld {
     const before=this.options;this.options=options;
     if(this.disposed)return;
     if(options.companionPlay!==before.companionPlay)this.companion.play(this.time);
+    if(this.moments.sync(options.data,this.map.id))this.renderer.shadowMap.needsUpdate=true;
     if(options.data.life!==before.data.life)void this.living.sync(options.data).then(changed=>{if(changed&&!this.disposed){this.renderer.shadowMap.needsUpdate=true;this.start();}}).catch(()=>{if(!this.disposed){this.dispose();this.failed();}});
     // Let the catch reaction play when the reward overlay releases the scene.
     if(options.data.shore.story!==before.data.shore.story||JSON.stringify(options.data.shore.regions)!==JSON.stringify(before.data.shore.regions))this.renderer.shadowMap.needsUpdate=true;
     if(options.pose==='surprise'&&before.pose!=='surprise')this.celebrateUntil=this.time+1.1;
-    this.visitor.group.visible=!!shoreVisitor(options.data.shore,this.map.id,options.data.life.visitor);
-    const visitor=shoreVisitor(options.data.shore,this.map.id,options.data.life.visitor),key=`${visitor??''}|${visitor?options.data.life.guests[visitor].outfit:'base'}|${options.data.journey.loadout.rod}|${this.companionEnabled}`;
+    this.visitor.group.visible=!!currentVisitor(options.data);
+    const visitor=currentVisitor(options.data),key=`${visitor??''}|${visitor?options.data.life.guests[visitor].outfit:'base'}|${options.data.journey.loadout.rod}|${this.companionEnabled}`;
     if(this.ready&&key!==this.actorKey)void this.prepareActors().catch(()=>{if(!this.disposed){this.dispose();this.failed();}});
     const auto=options.data.autoFishing.enabled;
     const savedSpot=selectedSpot(options.data);
@@ -140,7 +144,7 @@ export class CoastWorld {
     this.start();
   }
   go(id:DestinationId,automatic=false):void {
-    if(this.disposed||this.locked&&!automatic||id==='guest'&&!shoreVisitor(this.options.data.shore,this.map.id,this.options.data.life.visitor))return;
+    if(this.disposed||this.locked&&!automatic||id==='guest'&&!currentVisitor(this.options.data))return;
     const target=id==='guest'?this.living.visitorPoint:id==='pier'||id==='cove'?this.map.places[id]:this.facilities[id];this.path=route(this.position,target,this.map);this.destination=this.path.length?id:null;this.input={x:0,z:0};
     if(id==='pier'||id==='cove')this.spot=id;this.publish();this.start();
   }
@@ -204,7 +208,7 @@ export class CoastWorld {
   private publish(walking=this.walking):void {
     this.walking=walking;
     const facility=nearbyFacility(this.position,this.facilities,memorialBuilt(this.options.data));
-    const state:WorldState={near:facility??(shoreVisitor(this.options.data.shore,this.map.id,this.options.data.life.visitor)&&distance(this.position,this.living.visitorPoint)<=1.2?'guest':nearby(this.position,false,this.map)),walking,destination:this.destination,spot:this.spot,ready:this.ready,guestActivity:this.living.activity};
+    const state:WorldState={near:facility??(currentVisitor(this.options.data)&&distance(this.position,this.living.visitorPoint)<=1.2?'guest':nearby(this.position,false,this.map)),walking,destination:this.destination,spot:this.spot,ready:this.ready,guestActivity:this.living.activity};
     const value=JSON.stringify(state);if(value!==this.published){this.published=value;this.changed(state);}
     const attributes={displayedCollection:String(this.living.visibleCollection),guestActivity:this.living.activity,playerX:this.position.x.toFixed(2),playerZ:this.position.z.toFixed(2),spot:this.spot,actors:'2d-cutouts',shoreStory:this.map.id==='L01'?this.options.data.shore.story:this.options.data.shore.regions[this.map.id].stage,companion:this.companionEnabled??'none',playerFrame:this.player.frame,playerAction:this.player.action,region:this.map.id,playerFacing:this.player.facing.back?'back':'front'};
     for(const [key,text] of Object.entries(attributes))if(this.canvas.dataset[key]!==text)this.canvas.dataset[key]=text;

@@ -17,6 +17,7 @@ const GOAL_CARDS:Record<AutoGoal,{icon:CoastIconName;summary:string;note:string}
   catalog:{icon:'book',summary:'寻找还没遇见的收获',note:'新发现更容易上钩，每竿会多等一会儿。'},
   coins:{icon:'coin',summary:'出售重复的普通鱼',note:'首次发现、纪录和特殊外观都会留下。'},
   clues:{icon:'compass',summary:'跟进当前海岸的故事',note:'自动寻找线索，选择和布置时等你回来。'},
+  legend:{icon:'compass',summary:'循着线索寻找星砂宝石鱼',note:'需要换海岸、准备鱼饵或潮相时暂停等你。'},
 };
 
 interface Props { data:Bootstrap; controller:GameController; disabled:boolean }

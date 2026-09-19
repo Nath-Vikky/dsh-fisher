@@ -32,10 +32,14 @@ import {retainConversationArt} from './portrait-art.tsx';
 import {createFacilityView} from './facility-view.tsx';
 import {FACILITY_NAMES} from './world/facilities.ts';
 import type {FacilityId} from './world/facilities.ts';
+import {createAdventureJournal} from './adventure-journal.tsx';
+import type {AdventureArea} from './adventure-journal.tsx';
+import {picnicScript} from '../game/adventures.ts';
 
 export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentType<GameProps> {
   const Scene = createScene(React);
   const ShoreSpots = createShoreSpots(React),ShoreJournal=createShoreJournal(React);
+  const AdventureJournal=createAdventureJournal(React);
   const World = createWorldView(React);
   const Harbor = createHarbor(React);
   const CardButton = createCardButton(React);
@@ -84,7 +88,8 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
     const [talk,setTalk]=React.useState(false),[shoreTalk,setShoreTalk]=React.useState(false);
     const [companionPlay,setCompanionPlay]=React.useState(0);
     const [facility,setFacility]=React.useState<FacilityId|null>(null),[displayArea,setDisplayArea]=React.useState<'aquarium'|'shelf'|'decor'|null>(null);
-    const [panel,setPanel]=React.useState<'automatic'|'status'|'fishing'|'shore'|null>(null);
+    const [panel,setPanel]=React.useState<'automatic'|'status'|'fishing'|'shore'|'adventure'|null>(null);
+    const [adventureArea,setAdventureArea]=React.useState<AdventureArea>('legend'),[picnicTalk,setPicnicTalk]=React.useState(false);
     const root = React.useRef<HTMLDivElement>(null);
     React.useEffect(() => {
       const outside = (event: Event) => {
@@ -102,7 +107,8 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
     }, [controller]);
     React.useEffect(()=>{if(obscured)controller.pause();},[controller,obscured]);
     const data = view.data;
-    const currentGuest=data?shoreVisitor(data.shore,data.journey.region,data.life.visitor):null,currentOutfit=currentGuest&&data?data.life.guests[currentGuest].outfit:'base';
+    const localPicnic=data?.adventures.picnic?.region===data?.journey.region?data?.adventures.picnic:null;
+    const currentGuest=data?localPicnic?.guest??shoreVisitor(data.shore,data.journey.region,data.life.visitor):null,currentOutfit=currentGuest&&data?data.life.guests[currentGuest].outfit:'base';
     React.useEffect(()=>retainConversationArt(currentGuest,currentOutfit),[currentGuest,currentOutfit]);
     const cast = data?.active;
     const sim = view.sim;
@@ -114,6 +120,7 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
     React.useEffect(()=>{if(cast||data?.autoFishing.enabled||tab!=='fishing')setPrepareFishing(false);},[cast?.id,data?.autoFishing.enabled,tab]);
     React.useEffect(()=>{setTalk(false);setShoreTalk(false);setPrepareFishing(false);setWorldFallback(false);setPanel(null);},[data?.saveId]);
     React.useEffect(()=>{setWorldFallback(false);},[data?.journey.region]);
+    React.useEffect(()=>{setPicnicTalk(false);setFacility(null);setDisplayArea(null);},[data?.saveId,data?.journey.region]);
     const storyGuest=data?storyVisitor(data.shore,data.journey.region):null;
     React.useEffect(()=>{setShoreTalk(false);},[storyGuest,data?.journey.region]);
     React.useEffect(()=>setAutoHistory(false),[data?.saveId]);
@@ -140,7 +147,8 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
     const reelUp = () => { if (!toggle) controller.setReel(false); };
     const changeTab = (next: typeof tab) => { controller.pause();if(next!==tab)audio.play('page'); setTab(next); setConfirm(null); setCancelConfirm(false); root.current?.closest('.dsh-fisher-body')?.scrollTo({top:0}); };
     const openPanel=(next:typeof panel)=>{controller.pause();setPanel(next);};
-    const overlay=obscured||tab!=='fishing'||!!panel||!!confirm||cancelConfirm||!!pending||!!view.reward||autoHistory||!!data&&data.autoFishing.caught>data.autoFishing.seen||prepareFishing||talk||shoreTalk||!!facility;
+    const openAdventure=(area:AdventureArea)=>{setAdventureArea(area);setFacility(null);setPanel('adventure');controller.pause();};
+    const overlay=obscured||tab!=='fishing'||!!panel||!!confirm||cancelConfirm||!!pending||!!view.reward||autoHistory||!!data&&data.autoFishing.caught>data.autoFishing.seen||prepareFishing||talk||shoreTalk||picnicTalk||!!facility;
     const reelButton=(compact=false)=><button disabled={blocked} className={`dsh-fisher-primary dsh-fisher-reel${view.reel?' is-reeling':''}`} aria-pressed={view.reel}
       onPointerDown={event=>{if(event.button!==0)return;event.currentTarget.setPointerCapture(event.pointerId);if(!toggle)controller.setReel(true);}}
       onPointerUp={reelUp} onPointerCancel={()=>controller.setReel(false)} onLostPointerCapture={reelUp}
@@ -183,7 +191,7 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
           pose={pending?'surprise':phase==='casting'?'cast':phase==='fighting'&&view.reel?'reel':cast?'hold':'idle'}
           paused={automatic?!data.autoFishing.working:!!cast&&view.paused}
           overlay={overlay} guarded={(sim?.guardTicks??0)>0} companionPlay={companionPlay} simulation={sim??undefined} onFacility={id=>{controller.pause();setDisplayArea(null);setFacility(id);}}
-          onFish={spot=>{setPrepareFishing(true);if(spot!==data.shore.spots[data.journey.region])void controller.action({type:'shore.spot',spot});}} onGuest={()=>{if(storyGuest)setShoreTalk(true);else setTalk(true);}} onGear={()=>changeTab('harbor')} onFallback={()=>setWorldFallback(true)}/></div>:<div className={`dsh-fisher-scene dsh-fisher-play-scene${phase === 'fighting' && !view.paused ? ' is-fighting' : ''}`}>
+          onFish={spot=>{setPrepareFishing(true);if(spot!==data.shore.spots[data.journey.region])void controller.action({type:'shore.spot',spot});}} onGuest={()=>{if(localPicnic)setPicnicTalk(true);else if(storyGuest)setShoreTalk(true);else setTalk(true);}} onGear={()=>changeTab('harbor')} onFallback={()=>setWorldFallback(true)}/></div>:<div className={`dsh-fisher-scene dsh-fisher-play-scene${phase === 'fighting' && !view.paused ? ' is-fighting' : ''}`}>
           <Scene lowPerformance={lowPerformance} reducedMotion={reducedMotion} data={data} pose={pending?'surprise':phase==='casting'?'cast':phase==='fighting'&&view.reel?'reel':cast?'hold':'idle'} paused={overlay||(automatic?!data?.autoFishing.working:!!cast&&view.paused)||!view.connected} />
           {cast && !pending && <div className="dsh-fisher-float" data-phase={(automatic?!data?.autoFishing.working:view.paused) ? 'paused' : phase} data-glow={data!.journey.loadout.float==='U03'&&['L03','L04'].includes(location.id)} aria-hidden="true">{GEAR_ART[data!.journey.loadout.float]?(<img src={`${API}/assets/${thumbnailAsset(GEAR_ART[data!.journey.loadout.float]!)}`} alt=""/>):<i/>}<b /></div>}
           {pending?.isRecord&&data!.journey.loadout.float==='U04'&&<span className="dsh-fisher-record-flag">新纪录</span>}
@@ -209,12 +217,14 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
         </>:!worldMode?<button className="dsh-fisher-primary" disabled={blocked} onClick={()=>setPrepareFishing(true)}><Icon name="fish"/><span>准备钓鱼</span></button>:null}
       </div>}
       {!obscured&&<>
-      {facility&&data&&<Dialog title={FACILITY_NAMES[facility]} onClose={()=>{if(displayArea)setDisplayArea(null);else setFacility(null);}} closeLabel={displayArea?'返回设施':'回到岸边'} busy={view.busy} error={view.error} onRetry={()=>void controller.retry()}>{displayArea?<LifeView key={displayArea} displayOnly initialDisplay={displayArea} data={data} controller={controller} blocked={blocked} reducedMotion={reducedMotion} lowPerformance={lowPerformance} onFish={()=>setFacility(null)}/>:<FacilityView key={facility} id={facility} data={data} onManage={setDisplayArea} onTalk={()=>{setFacility(null);setTalk(true);}} onStories={()=>{setFacility(null);setPanel('shore');}}/>}</Dialog>}
+      {facility&&data&&<Dialog title={FACILITY_NAMES[facility]} onClose={()=>{if(displayArea)setDisplayArea(null);else setFacility(null);}} closeLabel={displayArea?'返回设施':'回到岸边'} busy={view.busy} error={view.error} onRetry={()=>void controller.retry()}>{displayArea?<LifeView key={displayArea} displayOnly initialDisplay={displayArea} data={data} controller={controller} blocked={blocked} reducedMotion={reducedMotion} lowPerformance={lowPerformance} onFish={()=>setFacility(null)}/>:<FacilityView key={facility} id={facility} data={data} onManage={setDisplayArea} onTalk={()=>{setFacility(null);if(localPicnic)setPicnicTalk(true);else setTalk(true);}} onStories={()=>{setFacility(null);setPanel('shore');}} onAdventure={openAdventure}/>}</Dialog>}
       {prepareFishing&&!cast&&!data?.autoFishing.enabled&&<Dialog title="这一竿的准备" onClose={()=>setPrepareFishing(false)} busy={view.busy} closeLabel="回到岸边">{fishingPanel}</Dialog>}
       {talk&&visitor&&data&&<Conversation key={visitor.id} definition={visitor} outfit={data.life.guests[visitor.id].outfit} opening={visitorLine!} onClose={()=>setTalk(false)} onJournal={()=>{setTalk(false);changeTab('life');}}/>}
       {panel==='fishing'&&<Dialog title="钓鱼操作" onClose={()=>setPanel(null)} closeLabel="回到岸边">{fishingPanel}</Dialog>}
       {panel==='automatic'&&data&&<Dialog title="海岸托管" className="dsh-fisher-auto-dialog" onClose={()=>setPanel(null)} closeLabel="回到岸边" busy={view.busy} error={view.error} onRetry={()=>void controller.retry()}><Automatic.Controls data={data} controller={controller} disabled={blocked} onHistory={()=>setAutoHistory(true)}/><ShoreSpots automatic compact data={data} controller={controller} disabled={blocked}/><Automatic.Progress data={data} controller={controller} disabled={blocked} onCancel={()=>setCancelConfirm(true)} onHarbor={()=>{setPanel(null);changeTab('harbor');}}/></Dialog>}
-      {panel==='shore'&&data&&<Dialog title="岸边故事" onClose={()=>setPanel(null)} busy={view.busy}><ShoreJournal data={data} controller={controller} disabled={blocked} onRead={()=>setShoreTalk(true)} onFish={()=>setPanel(null)} onPlay={()=>{setCompanionPlay(value=>value+1);setPanel(null);}}/></Dialog>}
+      {panel==='shore'&&data&&<Dialog title="岸边故事" onClose={()=>setPanel(null)} busy={view.busy}><ShoreJournal data={data} controller={controller} disabled={blocked} onRead={()=>setShoreTalk(true)} onFish={()=>setPanel(null)} onPlay={()=>{setCompanionPlay(value=>value+1);setPanel(null);}} onAdventures={()=>openAdventure('legend')}/></Dialog>}
+      {panel==='adventure'&&data&&<Dialog title="岸边生活" onClose={()=>setPanel(null)} busy={view.busy}><AdventureJournal key={adventureArea} initialArea={adventureArea} data={data} controller={controller} disabled={blocked} onPicnic={()=>setPicnicTalk(true)} onHarbor={()=>{setPanel(null);changeTab('harbor');}}/></Dialog>}
+      {picnicTalk&&localPicnic&&data&&<Conversation key={`picnic-${localPicnic.guest}`} definition={guest(localPicnic.guest)} outfit={data.life.guests[localPicnic.guest].outfit} script={picnicScript(localPicnic)} completeLabel="留进野餐相册" disabled={blocked} error={view.error} onClose={()=>setPicnicTalk(false)} onComplete={()=>{void controller.action({type:'picnic.finish'}).then(()=>{if(!controller.getSnapshot().data?.adventures.picnic){setPicnicTalk(false);openAdventure('picnic');}});}}/>}
       {shoreTalk&&data&&storyGuest&&<Conversation definition={guest(storyGuest)} outfit="base" script={data.journey.region==='L01'?BOTTLE_CONVERSATION:[{speaker:'guest',text:REGIONAL_STORIES[data.journey.region].opening},{speaker:'player',text:'我把两种办法都记下来，再选一条想走的路。'},{speaker:'guest',text:'不着急，线索会一直留着。在岸边故事里选好路线，我们就出发。'}]} disabled={blocked} error={view.error} onClose={()=>setShoreTalk(false)} onComplete={()=>{if(data.journey.region!=='L01'){setShoreTalk(false);setPanel('shore');return;}void controller.action({type:'shore.read'}).then(()=>{if(controller.getSnapshot().data?.shore.story!=='bottle')setShoreTalk(false);});}}/>}
       {panel==='status'&&<Dialog title="海岸状态" onClose={()=>setPanel(null)}><div className="dsh-fisher-stat-grid"><div><strong>{levelInfo(data?.experience??0).level}</strong><span>海岸等级</span></div><div><strong>{data?.coins??'—'}</strong><span>壳币</span></div><div><strong>{data?.tokens??'—'}</strong><span>潮汐碎片</span></div><div><strong>{data?.research??'—'}</strong><span>研究</span></div></div><p role="status">{view.error??(!view.connected?'海岸正在等待连接，进度已暂停。':view.busy?'正在保存…':'进度已保存在本机。')}</p>{(view.error||!view.connected)&&<button disabled={view.busy} onClick={()=>void controller.retry()}>{view.retryPending?'重试保存':'重新连接'}</button>}{data?.journey.overflow&&<p>有货币达到持有上限，超出部分未计入。</p>}</Dialog>}
       {tab!=='fishing'&&<Dialog title={{catalog:'海岸图鉴',inventory:'我的背包',harbor:'码头',life:'海岸手记'}[tab]} onClose={()=>changeTab('fishing')} closeLabel="回到海岸" className="dsh-fisher-page-dialog">

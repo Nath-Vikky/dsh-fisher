@@ -18,7 +18,7 @@ export const BOTTLE_CONVERSATION = [
 
 export function createShoreJournal(React:typeof ReactTypes){
   const Pager=createPager(React),Dialog=createDialog(React),RegionalJournal=createRegionalJournal(React),CompanionJournal=createCompanionJournal(React);
-  return function ShoreJournal({data,controller,disabled,onRead,onFish,onPlay}:{data:Bootstrap;controller:GameController;disabled:boolean;onRead:()=>void;onFish:()=>void;onPlay:()=>void}){
+  return function ShoreJournal({data,controller,disabled,onRead,onFish,onPlay,onAdventures}:{data:Bootstrap;controller:GameController;disabled:boolean;onRead:()=>void;onFish:()=>void;onPlay:()=>void;onAdventures:()=>void}){
     const [selected,setSelected]=React.useState<string|null>(null),[confirmed,setConfirmed]=React.useState(false),[page,setPage]=React.useState(0);
     const [tab,setTab]=React.useState<'story'|'companion'>('story'),[donating,setDonating]=React.useState(false);
     const shore=data.shore,story=SHORE_STORY[shore.story],local=data.journey.region==='L01';
@@ -28,6 +28,7 @@ export function createShoreJournal(React:typeof ReactTypes){
     React.useEffect(()=>{if(shore.timber===2||shore.story!=='recovered')setDonating(false);},[shore.timber,shore.story]);
     return <div className="dsh-fisher-shore-journal">
       <div className="dsh-fisher-shore-tabs"><button aria-pressed={tab==='story'} onClick={()=>setTab('story')}>本岸故事</button><button aria-pressed={tab==='companion'} onClick={()=>setTab('companion')}>岸边伙伴</button></div>
+      <button onClick={onAdventures}>继续岸边生活 · 传说／野餐／纪念</button>
       {tab==='companion'?<CompanionJournal data={data} controller={controller} disabled={disabled} onPlay={onPlay}/>:isStoryRegion(data.journey.region)?<RegionalJournal key={data.journey.region} data={data} controller={controller} disabled={disabled} onRead={onRead} onFish={onFish}/>:<><h3>{story.title}</h3><p>{story.detail}</p><p className="dsh-fisher-shore-next">{story.next}</p>
         {!local&&<p>这段故事发生在摸鱼塘，去码头切换海岸后可以继续。</p>}
         {shore.story==='quiet'&&<small>浅湾收获 {shore.searched}/2 · 手动与自动都计入</small>}

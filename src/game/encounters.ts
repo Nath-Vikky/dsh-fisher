@@ -9,7 +9,7 @@ import type { AutoGoal } from './auto-fishing.ts';
 import { spotWeights, spotPreference } from './shore.ts';
 import type { SpotId } from './shore.ts';
 import type {CompanionId} from './companions.ts';
-export type EncounterSource = 'random' | 'pity' | 'target' | 'invitation' | 'tutorial' | 'legacy';
+export type EncounterSource = 'random' | 'pity' | 'target' | 'invitation' | 'tutorial' | 'legacy' | 'legend';
 export interface EncounterMeta { source:EncounterSource; region:RegionId; bait:BaitId; tide:Tide; spot?:SpotId; autoGoal?:AutoGoal; companion?:CompanionId|null }
 export function weighted<T>(items: readonly T[], weight:(item:T)=>number, random:()=>number): T {
   const total=items.reduce((sum,item)=>sum+weight(item),0);
@@ -28,7 +28,7 @@ export function preferenceAvailable(regionId:RegionId, baitId:BaitId): boolean {
   const tag=bait(baitId).tag;
   return !tag || SPECIES.some(item=>item.region===regionId&&item.tags.includes(tag));
 }
-export function rollEncounter(seed:number,id:string,mode:Mode,journey:Journey,discovered:readonly SpeciesId[],spot?:SpotId,autoGoal?:AutoGoal): Encounter & {meta:EncounterMeta} {
+export function rollEncounter(seed:number,id:string,mode:Mode,journey:Journey,discovered:readonly SpeciesId[],spot?:SpotId,autoGoal?:AutoGoal,legendary=false): Encounter & {meta:EncounterMeta} {
   const location=journey.region, baitId=journey.bait, tide=currentTide(journey);
   const pool=SPECIES.filter(item=>item.region===location && item.kind!=='guest');
   const missing=pool.filter(item=>!discovered.includes(item.id));
@@ -38,7 +38,10 @@ export function rollEncounter(seed:number,id:string,mode:Mode,journey:Journey,di
   const goalWeight=(item:Species)=>autoGoal==='catalog'&&!discovered.includes(item.id)?3:1;
   const pick=randomStream(seed,'entry-v2');
   let def:Species, source:EncounterSource='random';
-  if (baitId==='B08') {
+  if(legendary){
+    if(location!=='L04'||spot!=='pier'||baitId!=='B06'||tide!=='glow'||!journey.tutorialDone)throw new Error('特别遭遇的条件还未备齐');
+    def=species('F026');source='legend';
+  }else if (baitId==='B08') {
     if (!journey.target || !journey.invitations.includes(journey.target)) throw new Error('还没有这位来客的邀请');
     def=species(journey.target);
     if (def.kind!=='guest'||def.region!==location||discovered.includes(def.id)) throw new Error('这份邀请现在不可使用');
@@ -71,6 +74,7 @@ export function rollEncounter(seed:number,id:string,mode:Mode,journey:Journey,di
     quality=Math.round(q*1000);sizeFactor=.75+.75*q;
     variant=journey.variantStreak>=39?'pearl':weighted(['original','pearl','starsand'] as const,
       item=>(tide==='glow'?{original:90,pearl:8,starsand:2}:{original:93,pearl:6,starsand:1})[item],randomStream(seed,'variant-v2'));
+    if(source==='legend')variant='starsand';
     variantFactor=variant==='pearl'?1.15:variant==='starsand'?1.5:1;
   }
   const behavior=randomStream(seed,'behavior-v2');
@@ -78,6 +82,6 @@ export function rollEncounter(seed:number,id:string,mode:Mode,journey:Journey,di
     price:def.price===0?0:Math.max(1,Math.min(1000,Math.round(def.price*region(location).prices*sizeFactor*variantFactor))),
     caughtAt:'',isNew:false,isRecord:false,isNewVariant:false,locked:false};
   return {catch:catchItem,challenge:{seed:Math.floor(behavior()*4294967296),waitTicks:40+Math.floor(behavior()*81),
-    pattern:def.pattern,mode:['target','invitation','tutorial'].includes(source)?'guided':mode,rulesVersion:2,modifiers:modifiers(journey.loadout),size:quality??500},
+    pattern:source==='legend'?'feint':def.pattern,mode:['target','invitation','tutorial'].includes(source)?'guided':mode,rulesVersion:2,modifiers:modifiers(journey.loadout),size:quality??500},
     meta:{source,region:location,bait:baitId,tide,...spot?{spot}:{},...autoGoal?{autoGoal}:{}}};
 }

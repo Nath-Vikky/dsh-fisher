@@ -6,14 +6,15 @@ import type { ShoreState,SpotId } from './shore.ts';
 import {isStoryRegion,regionalSpot,regionalPause} from './regional-stories.ts';
 import type {CompanionId} from './companions.ts';
 
-export const AUTO_GOALS=['relax','catalog','coins','clues'] as const;
+export const AUTO_GOALS=['relax','catalog','coins','clues','legend'] as const;
 export type AutoGoal=typeof AUTO_GOALS[number];
-export const AUTO_GOAL_NAMES:Record<AutoGoal,string>={relax:'随心钓',catalog:'补图鉴',coins:'攒壳币',clues:'找线索'};
+export const AUTO_GOAL_NAMES:Record<AutoGoal,string>={relax:'随心钓',catalog:'补图鉴',coins:'攒壳币',clues:'找线索',legend:'追传说'};
 export const AUTO_GOAL_DETAILS:Record<AutoGoal,string>={
   relax:'沿用所选落点和鱼饵，所有收获都保留。',
   catalog:'留在当前海岸，提高未发现类别、稀有层与条目的权重。每竿多用25%活动时间，上限20分钟；定向饵和原有保底仍优先。',
   coins:'自动选择当前海岸普通鱼较多的浅水落点。只出售重复、原色、普通鱼；首次发现、纪录、特殊外观和奇珍全部保留。背包满时仍先暂停。',
   clues:'按当前海岸的故事路线选择落点。发现线索或备齐材料后暂停，等你交谈或布置；线索不会过期。',
+  legend:'按传说线索选择浅湾或深水落点。需要换岸、鱼饵或潮相时暂停，等你准备；不会自动消费壳币。',
 };
 export const isAutoGoal=(value:unknown):value is AutoGoal=>AUTO_GOALS.some(goal=>goal===value);
 
@@ -34,6 +35,7 @@ export function autoFishingDuration(item:Catch,goal?:AutoGoal,companion?:Compani
 export function automaticSpot(goal:AutoGoal,region:RegionId,shore:ShoreState,known:readonly SpeciesId[]):SpotId {
   if(goal==='relax')return shore.spots[region];
   if(goal==='coins')return 'cove';
+  if(goal==='legend')return region==='L03'?'cove':'pier';
   if(goal==='clues')return isStoryRegion(region)?regionalSpot(region,shore.regions[region]):shore.story==='quiet'?'cove':'pier';
   return SPECIES.some(def=>def.region===region&&def.kind==='fish'&&!known.includes(def.id))?'cove':'pier';
 }

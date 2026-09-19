@@ -11,7 +11,8 @@ import type { DecorId, DecorSlot } from './game/decor.ts';
 import type { AutoCast,AutoFishingView,AutoGoal } from './game/auto-fishing.ts';
 import type { ShoreState, SpotId } from './game/shore.ts';
 import type {CompanionId} from './game/companions.ts';
-export const VERSION = '0.3.0-preview.10';
+import type {Adventures,PicnicMenu,PicnicMood} from './game/adventures.ts';
+export const VERSION = '0.3.0-preview.11';
 export const API = '/api/dsh-fisher/v1';
 export const COAST_ASSET = `${API}/assets/l01-coast-pixel-v1.webp`;
 export type LauncherStatus='shore'|'fishing'|'waiting';
@@ -27,11 +28,14 @@ export interface Bootstrap {
   protocolVersion: 1; version: string; generation: string; revision: number; saveId: string;
   gameplayAvailable: boolean; issue: string | null; coins: number; tokens: number; research: number;
   experience: number; released: number; inventory: Catch[]; catalog: Partial<Record<SpeciesId, RecordEntry>>;
-  shore: ShoreState; journey: Journey; work: WorkView; life:LifeState; autoFishing:AutoFishingView;
+  shore: ShoreState; journey: Journey; work: WorkView; life:LifeState; autoFishing:AutoFishingView; adventures:Adventures;
   storage:{canManage:boolean};
   active: ActiveCast | null; pending: Catch | null; lastOutcome: 'escaped' | 'cancelled' | null;
 }
 export type Action =
+  | {type:'legend.hear'|'legend.arm'|'picnic.finish'}
+  | {type:'shore.memory';kind:'letter'|'light';species:SpeciesId}
+  | {type:'picnic.prepare';guest:GuestId;menu:PicnicMenu;mood:PicnicMood;catchId:string;confirmed?:boolean}
   | { type: 'cast.begin'; mode: Mode }
   | { type: 'shore.spot'; spot: SpotId }
   | { type: 'shore.read'|'shore.build' }
@@ -97,7 +101,7 @@ export function isBootstrap(value: unknown): value is Bootstrap {
   const data = value as Record<string, unknown>;
   return data.protocolVersion === 1 && typeof data.version === 'string' && typeof data.generation === 'string'
     && typeof data.saveId === 'string' && Number.isSafeInteger(data.revision) && typeof data.gameplayAvailable === 'boolean'
-    && Number.isSafeInteger(data.coins) && Array.isArray(data.inventory) && !!data.catalog && !!data.journey && !!data.work && !!data.life && !!data.autoFishing && !!data.shore
+    && Number.isSafeInteger(data.coins) && Array.isArray(data.inventory) && !!data.catalog && !!data.journey && !!data.work && !!data.life && !!data.autoFishing && !!data.shore && !!data.adventures
     && typeof data.storage==='object' && data.storage!==null && typeof (data.storage as Record<string,unknown>).canManage==='boolean'
     && 'active' in data && 'pending' in data;
 }
