@@ -14,7 +14,8 @@ export function createWorld(React:typeof ReactTypes){
   return function World(props:WorldProps){
     const coast=COASTS[props.data.journey.region],PLACES=coast.places;
     const placeName=(id:DestinationId)=>isFacility(id)?FACILITY_NAMES[id]:PLACES[id].name;
-    const destinations:DestinationId[]=['pier','cove',...(shoreVisitor(props.data.shore,coast.id,props.data.life.visitor)?['guest' as const]:[]),'aquarium','shelf','seat',...(memorialBuilt(props.data)?['memorial' as const]:[])];
+    const visitor=props.data.adventures.picnic?.region===coast.id?props.data.adventures.picnic.guest:shoreVisitor(props.data.shore,coast.id,props.data.life.visitor);
+    const destinations:DestinationId[]=['pier','cove',...(visitor?['guest' as const]:[]),'aquarium','shelf','seat',...(memorialBuilt(props.data)?['memorial' as const]:[])];
     const canvas=React.useRef<HTMLCanvasElement>(null),host=React.useRef<CoastWorld>(),latest=React.useRef(props);latest.current=props;
     const [state,setState]=React.useState<WorldState>({near:null,walking:false,destination:null,spot:'pier',ready:false,guestActivity:'在岸边等你'});
     const [error,setError]=React.useState(false),[attempt,setAttempt]=React.useState(0);

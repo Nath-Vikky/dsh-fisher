@@ -6,12 +6,16 @@ import { move } from './map.ts';
 import type { CoastMap } from './regions.ts';
 import type {CompanionId} from '../../game/companions.ts';
 import type {SpotId} from './map.ts';
+import {COMPANION_ACTION_ART} from '../../game/actor-art.ts';
+import type {ActionAtlas} from './actor-atlas.ts';
+import {applyAtlas} from './actor-atlas.ts';
 
 export class Companion {
   group=new Group();private material=new SpriteMaterial({alphaTest:.12,depthWrite:true,toneMapped:false});
   private sprite=new Sprite(this.material);private shadow:Mesh;private disposed=false;
   private lastPlayer:Point|null=null;private position:Point={x:0,z:0};
   private loaded:CompanionId|null=null;private generation=0;private playUntil=0;private cloud=new Group();private rain:LineSegments;private ring:Mesh;
+  private baseFile='';private atlas:ActionAtlas|null=null;private ready=false;private warming=false;private right=true;private releaseBase:()=>void=()=>{};private releaseActions:()=>void=()=>{};
   constructor(private pictures:ActorTextures){
     this.sprite.center.set(.5,.08);this.sprite.scale.set(1.15,1.15,1);this.sprite.renderOrder=2;
     this.shadow=new Mesh(new CircleGeometry(.23,16),new MeshBasicMaterial({color:'#d7bb7b',transparent:true,opacity:.25,depthWrite:false}));
@@ -24,18 +28,30 @@ export class Companion {
   }
   play(time:number):void{this.playUntil=time+6;}
   async prepare(id:CompanionId|null):Promise<void>{
-    const generation=++this.generation;this.playUntil=0;if(!id){this.loaded=null;return;}const texture=await this.pictures.load(spriteName(id,'original')!);if(this.disposed||generation!==this.generation)return;
+    const generation=++this.generation;this.playUntil=0;this.releaseActions();this.releaseActions=()=>{};this.ready=false;this.warming=false;this.atlas=id?COMPANION_ACTION_ART[id]:null;
+    if(!id){this.loaded=null;this.releaseBase();this.releaseBase=()=>{};this.material.map=null;return;}
+    const file=spriteName(id,'original')!,release=this.pictures.retain([file]);let texture;
+    try{texture=await this.pictures.load(file);}catch(error){release();throw error;}
+    if(this.disposed||generation!==this.generation){release();return;}this.releaseBase();this.releaseBase=release;this.baseFile=file;
     if(!this.material.map)this.material.needsUpdate=true;this.material.map=texture;
     this.loaded=id;const height=id==='A004'?1.05:1.15,source=texture.image as ImageBitmap;this.sprite.scale.set(height*source.width/source.height,height,1);
+  }
+  async warmActions():Promise<void>{
+    if(!this.atlas||this.warming||this.ready)return;this.warming=true;const generation=this.generation,atlas=this.atlas,release=this.pictures.retain([atlas.file]);
+    try{await this.pictures.load(atlas.file);if(this.disposed||generation!==this.generation){release();return;}this.releaseActions=release;this.ready=true;}catch{release();}finally{if(generation===this.generation)this.warming=false;}
   }
   update(id:CompanionId|null,player:Point,time:number,walking:boolean,guarded:boolean,reduced:boolean,map:CoastMap,fishing:SpotId|null):void {
     this.group.visible=!!id&&id===this.loaded&&!!this.material.map;if(!this.group.visible)return;
     if(!this.lastPlayer||player.x!==this.lastPlayer.x||player.z!==this.lastPlayer.z){
+      if(this.lastPlayer){const direction=(player.x-this.lastPlayer.x)*.832-(player.z-this.lastPlayer.z)*.555;if(Math.abs(direction)>.001)this.right=direction<0;}
       // Stay beside the player in screen space, with the same shore collision limits.
       this.position=move(player,{x:.6,z:-1.1},map);this.lastPlayer={...player};
     }
     this.group.position.set(this.position.x,.15,this.position.z);
     const playing=time<this.playUntil;
+    const frame=guarded&&id==='A002'?3:walking?(reduced?0:Math.floor(time*4)%2):playing?(id==='A002'?2:id==='A013'?(Math.floor(time*3)%2?3:2):Math.floor(time*2)%2?2:3):id==='A004'&&fishing?3:null;
+    const atlas=this.ready&&frame!==null?this.atlas:null,texture=this.pictures.textures.get(atlas?atlas.file:this.baseFile);
+    if(texture){this.material.map=texture;if(atlas)applyAtlas(this.sprite,texture,atlas,frame!,id==='A004'?1.05:1.15,this.right);else{const height=id==='A004'?1.05:1.15,source=texture.image as ImageBitmap;this.sprite.center.set(.5,.08);this.sprite.scale.set(height*source.width/source.height,height,1);texture.repeat.set(this.right?1:-1,1);texture.offset.set(this.right?0:1,0);}}
     this.sprite.position.y=!reduced&&(walking||playing&&id==='A013')?Math.abs(Math.sin(time*(id==='A013'?6:9)))*(playing?.28:.07):0;
     this.material.rotation=!reduced&&(walking||playing&&id==='A002')?Math.sin(time*9)*(playing?.1:.03):0;
     this.material.color.set(guarded?'#ffe2a0':'#ffffff');this.shadow.scale.setScalar(guarded||playing?1.6:1);
@@ -44,5 +60,6 @@ export class Companion {
     this.ring.visible=id==='A013'&&!!fishing;
     if(this.ring.visible){const water=map.places[fishing!].water!;this.ring.position.set(water.x-this.position.x,water.y-.12,water.z-this.position.z);this.ring.scale.setScalar(reduced?1:1+Math.sin(time*2)*.12);}
   }
-  dispose():void{this.disposed=true;this.generation++;this.material.dispose();this.rain.geometry.dispose();(this.rain.material as LineBasicMaterial).dispose();}
+  get actionsReady():boolean{return this.ready;}
+  dispose():void{this.disposed=true;this.generation++;this.releaseBase();this.releaseActions();this.material.dispose();this.rain.geometry.dispose();(this.rain.material as LineBasicMaterial).dispose();}
 }

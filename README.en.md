@@ -4,7 +4,7 @@
 
 A relaxing fishing and collection plugin for DeepSeek Harness (DSH) Web. Head to the shore and cast a line, or enable automatic fishing and let your character wait for a catch while you use DSH.
 
-**Current main branch: `main` · `0.3.0-preview.11`**. Explore four walkable 3D shores with detailed 2D characters and a pixel-art paper interface. You can build and install the plugin locally from source; it has not been published to npm.
+**Current main branch: `main` · `0.3.0-preview.12`**. Explore four walkable 3D shores with detailed 2D characters and a pixel-art paper interface. You can build and install the plugin locally from source; it has not been published to npm.
 
 The original pixel-art version, `0.1.0-rc.11`, is preserved in full on [archive/pixel-v1-rc11](https://github.com/Nath-Vikky/dsh-fisher/tree/archive/pixel-v1-rc11).
 
@@ -33,11 +33,11 @@ Characters use shaded 2D images that convey depth and are occluded by objects in
 
 The game UI currently uses Chinese. The English instructions below include the Chinese button labels so you can find them in the game.
 
-Aquariums, display shelves, and equipped decorations appear on all four 3D shores. Visitors stroll around the display area and comment on your collection. Approach facilities to inspect and arrange them using the bottom action button, or navigate there with “去哪里”. All 24 decorations have distinct geometry, and float movement and splashes reflect different fight patterns.
+Aquariums, display shelves, and equipped decorations appear on all four 3D shores. Visitors walk, sit and observe your collection in either outfit, and head to the seat for a picnic. Approach facilities to inspect and arrange them using the bottom action button, or navigate there with “去哪里”. All 24 decorations have distinct geometry, and float movement and splashes reflect different fight patterns.
 
 Each coast has distinct fishing spots and an independent story. Coral Bay, Moonlit Pool, and Deepwater Sea offer branching routes with persistent shore decorations. The automatic Clues goal follows the current story and waits when a choice or construction needs your attention.
 
-Invite a discovered Sword-and-Shield Dog, Milk Frog, or Banana Cat from Shore Stories → Companions. They offer line protection, catch clues, or a shorter automatic wait, plus small shore interactions. A cast keeps the companion it started with.
+Invite a discovered Sword-and-Shield Dog, Milk Frog, or Banana Cat from Shore Stories → Companions. They offer line protection, catch clues, or a shorter automatic wait, plus small shore interactions. Companions have walking, greeting, guarding or jumping frames. A cast keeps the companion it started with.
 
 Open Shore Stories → “继续岸边生活” to track a stardust Gemfish, dedicate a letter or light to a built memorial, or invite a familiar visitor to a picnic. Tracking requires the specified shores, spots, and tides. Picnics consume one ordinary fish you explicitly choose and leave a memory in an album after the conversation. The automatic “追传说” goal waits whenever travel or preparation is needed.
 

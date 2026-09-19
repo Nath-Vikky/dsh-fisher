@@ -27,8 +27,9 @@ const files=new Set([...illustrations].flatMap(file=>[file,thumbnailAsset(file)]
 const actual=await readdir(directory);assert.deepEqual(actual.sort(),[...files].sort(),'Runtime directory must contain exactly the referenced assets');
 let total=0;
 for(const file of files) {
-  assert.match(file,/^[a-z0-9-]+\.webp$/);const bytes=await readFile(resolve(directory,file));
-  assert.equal(bytes.toString('ascii',0,4),'RIFF');assert.equal(bytes.toString('ascii',8,12),'WEBP');
+  assert.match(file,/^[a-z0-9-]+\.(webp|png)$/);const bytes=await readFile(resolve(directory,file));
+  if(file.endsWith('.webp')){assert.equal(bytes.toString('ascii',0,4),'RIFF');assert.equal(bytes.toString('ascii',8,12),'WEBP');}
+  else{assert.equal(bytes.toString('hex',0,8),'89504e470d0a1a0a');assert.equal(bytes[25],6,'Action atlases must retain RGBA transparency');assert.ok(bytes.readUInt32BE(16)<=2048&&bytes.readUInt32BE(20)<=2048);}
   assert.ok(bytes.length>100,`${file} is empty`);total+=bytes.length;
 }
 const entryGzip=gzipSync(await readFile(resolve(root,'lib/client.js'))).length;

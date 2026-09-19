@@ -12,7 +12,7 @@ import type { AutoCast,AutoFishingView,AutoGoal } from './game/auto-fishing.ts';
 import type { ShoreState, SpotId } from './game/shore.ts';
 import type {CompanionId} from './game/companions.ts';
 import type {Adventures,PicnicMenu,PicnicMood} from './game/adventures.ts';
-export const VERSION = '0.3.0-preview.11';
+export const VERSION = '0.3.0-preview.12';
 export const API = '/api/dsh-fisher/v1';
 export const COAST_ASSET = `${API}/assets/l01-coast-pixel-v1.webp`;
 export type LauncherStatus='shore'|'fishing'|'waiting';

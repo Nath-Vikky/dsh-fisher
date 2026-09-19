@@ -2,6 +2,7 @@ import type { RegionId } from './content.ts';
 import type { GuestId } from './guests.ts';
 import type { DecorId } from './decor.ts';
 import type { BaitId } from './progression.ts';
+import {GUEST_ACTION_ART,COMPANION_ACTION_ART} from './actor-art.ts';
 
 export type Outfit = 'base' | 'alternate';
 export type PlayerPose = 'idle' | 'cast' | 'hold' | 'reel' | 'surprise';
@@ -58,5 +59,6 @@ export function guestPicture(id:GuestId,outfit:Outfit,kind:'portrait'|'chibi'):s
 }
 export function visualIllustrations():string[] {
   return [...Object.values(GUEST_ART).flatMap(outfits=>Object.values(outfits).flatMap(item=>[item.portrait,item.chibi])),
-    ...Object.values(DECOR_ART),...Object.values(BAIT_ART),...Object.values(PLAYER_ART).flat(),...Object.values(WORLD_PLAYER_ART)];
+    ...Object.values(DECOR_ART),...Object.values(BAIT_ART),...Object.values(PLAYER_ART).flat(),...Object.values(WORLD_PLAYER_ART),
+    ...Object.values(GUEST_ACTION_ART).flatMap(outfits=>Object.values(outfits).map(atlas=>atlas.file)),...Object.values(COMPANION_ACTION_ART).map(atlas=>atlas.file)];
 }

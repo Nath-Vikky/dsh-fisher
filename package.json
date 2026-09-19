@@ -1,6 +1,6 @@
 {
   "name": "@nath-vikky/dsh-fisher",
-  "version": "0.3.0-preview.11",
+  "version": "0.3.0-preview.12",
   "description": "A cozy fishing companion for DeepSeek Harness Web",
   "private": true,
   "type": "module",
@@ -17,6 +17,7 @@
   "files": [
     "lib/*.js",
     "assets/runtime/*.webp",
+    "assets/runtime/*.png",
     "assets/readme/*.png",
     "assets/readme/*.jpg",
     "cordis.patch.yml",

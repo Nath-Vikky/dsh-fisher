@@ -8,7 +8,7 @@ import {decorModel,disposeDecor} from './decor-models.ts';
 import type {ActorTextures} from './actors.ts';
 import type {CoastMap} from './regions.ts';
 import type {Point} from './map.ts';
-import {distance,move,route,walkable} from './map.ts';
+import {VisitorRoutine} from './visitor-routine.ts';
 
 export function furnishedMap(map:CoastMap):CoastMap {
   const p=CORNERS[map.id];
@@ -18,10 +18,10 @@ export class LivingShore {
   group=new Group();private box=new BoxGeometry(1,1,1);private wood=new MeshStandardMaterial({color:'#b69b75',roughness:.88});
   private slots=new Map<DecorSlot,{group:Group;id:DecorId|null}>();private sprites:Sprite[]=[];private spriteMaterials:SpriteMaterial[]=[];
   private key='';private generation=0;private disposed=false;private fishCount=0;private files:(string|null)[]=[];
-  private visitorPath:Point[]=[];private nextVisit=0;private place=0;private actorPosition:Point|null=null;activity='在岸边等你';
-  private pictures:ActorTextures;private map:CoastMap;
+  private routine:VisitorRoutine;
+  private pictures:ActorTextures;
   constructor(pictures:ActorTextures,map:CoastMap){
-    this.pictures=pictures;this.map=map;
+    this.pictures=pictures;this.routine=new VisitorRoutine(map);
     const p=CORNERS[map.id];this.group.position.set(p.x,.14,p.z);
     this.cube(this.group,this.wood,0,.2,0,1.32,.4,.7);
     const water=new MeshStandardMaterial({color:'#72c9c5',roughness:.35,transparent:true,opacity:.35,depthWrite:false});
@@ -56,21 +56,9 @@ export class LivingShore {
       else sprite.position.set(1.25+((i-8)%3)*.3,.41+Math.floor((i-8)/3)*.41,.28);
     }
   }
-  visitor(dt:number,time:number,player:Point,freeze:boolean):{position:Point;walking:boolean} {
-    this.actorPosition??={...this.map.places.guest};const current=this.actorPosition,p=CORNERS[this.map.id];
-    const stops=[{...this.map.places.guest},{x:p.x,z:p.z+1},{x:p.x-1.35,z:p.z+.82},{x:p.x+1.55,z:p.z+.85}];
-    if(freeze||distance(player,current)<1.65)return {position:current,walking:false};
-    if(!this.visitorPath.length&&time>=this.nextVisit){
-      this.place=(this.place+1)%stops.length;const target=stops[this.place]!;
-      if(walkable(target,this.map))this.visitorPath=route(current,target,this.map);
-      this.nextVisit=time+14;this.activity=['在岸边等你',this.fishCount?'在看鱼缸里的收藏':'在看看小鱼缸','在长椅旁歇脚','在看陈列架'][this.place]!;
-    }
-    const target=this.visitorPath[0];if(!target||dt===0)return {position:current,walking:false};
-    const length=distance(current,target);if(length<.025){this.visitorPath.shift();return {position:current,walking:false};}
-    const step=Math.min(length,dt*.65);this.actorPosition=move(current,{x:(target.x-current.x)/length*step,z:(target.z-current.z)/length*step},this.map);
-    return {position:this.actorPosition,walking:distance(current,this.actorPosition)>.001};
-  }
-  get visitorPoint():Point{return this.actorPosition??this.map.places.guest;}
+  visitor(dt:number,time:number,player:Point,freeze:boolean,picnic=false){return this.routine.update(dt,time,player,freeze,picnic);}
+  get visitorPoint():Point{return this.routine.point;}
+  get activity():string{return !this.fishCount&&this.routine.activity==='正在看鱼缸里的收藏'?'在看看小鱼缸':this.routine.activity;}
   get visibleCollection(){return this.files.filter(Boolean).length;}
   dispose():void{this.disposed=true;this.generation++;for(const material of this.spriteMaterials)material.dispose();}
 }
