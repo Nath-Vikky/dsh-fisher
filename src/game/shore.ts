@@ -17,7 +17,7 @@ export function emptyShore(): ShoreState { return { spots: { L01:'pier', L02:'pi
 export function isSpot(value: unknown): value is SpotId { return value === 'pier' || value === 'cove'; }
 export function waterClue(spot: SpotId, tide: Tide,region:RegionId='L01'): { title: string; detail: string } {
   if(region==='L02')return spot==='cove'?{title:'贝沙游鱼',detail:'浅滩普通鱼较多，同稀有层中偏爱海鲜的鱼更容易靠近；适合捡拾海风故事的线索。'}:{title:'珊瑚怪影',detail:'栈桥的奇珍异兽和旧物更常见。怪味饵、奇潮会进一步吸引奇珍异兽。'};
-  if(region==='L03')return spot==='cove'?{title:'莲下萤光',detail:'睡莲间更容易遇到普通鱼，同稀有层中偏爱微光的鱼更多；辉潮仍影响特殊外观。'}:{title:'月影深纹',detail:'木台外侧的奇珍异兽和旧物更多，同稀有层中偏爱深海气味的鱼更容易上钩。'};
+  if(region==='L03')return spot==='cove'?{title:'莲下萤光',detail:'睡莲间更容易遇到普通鱼，同稀有层中偏爱微光的鱼更多；浮光潮仍影响特殊外观。'}:{title:'月影深纹',detail:'木台外侧的奇珍异兽和旧物更多，同稀有层中偏爱深海气味的鱼更容易上钩。'};
   if(region==='L04')return spot==='cove'?{title:'星砂鱼群',detail:'礁岸普通鱼更多，同稀有层中偏爱微光的鱼更容易靠近；适合慢慢筹备航灯材料。'}:{title:'深处回声',detail:'栈台更容易带回奇珍异兽与旧物，同稀有层中偏爱深海气味的鱼更多。'};
   return spot === 'cove'
     ? { title:'浅水鱼影', detail:'普通鱼更常见，同稀有层中偏爱谷香的鱼更容易靠近。适合攒鱼、找浅湾线索。' }

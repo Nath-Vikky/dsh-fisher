@@ -117,10 +117,11 @@ test('one writer, restart with the same cast, ownership fencing, and exactly-onc
     assert.equal(service.snapshot().coins, coins + item.price);
     assert.equal((await service.mutate(sale, false)).duplicate, true, 'receipt survives a host generation change');
     const another = await catchOne(service);
+    const otherItems=service.snapshot().inventory;
     await action(service, { type: 'catch.resolve', catchId: another.id, choice: 'keep' });
     const release = request(service, { type: 'inventory.resolve', catchId: another.id, choice: 'release', confirmed:true });
     await service.mutate(release, false); await service.mutate(release, false);
-    assert.equal(service.snapshot().released, 1); assert.equal(service.snapshot().inventory.length, 0);
+    assert.equal(service.snapshot().released, 1); assert.deepEqual(service.snapshot().inventory,otherItems);
   } finally { await service.close(); await competing.close(); await cleanup(directory); }
 });
 

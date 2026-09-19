@@ -17,8 +17,8 @@ export const REGIONAL_STORIES:Record<StoryRegion,StoryDefinition>={
     near:{name:'贝壳声串',detail:'在贝壳浅滩再成功收获2次，收集被浪捎来的贝壳。',kind:'catches',spot:'cove',need:2},
     far:{name:'珊瑚风灯',detail:'去珊瑚栈桥成功收获2次，找回灯座的零件。',kind:'catches',spot:'pier',need:2},
   }},
-  L03:{title:'替月亮留一盏灯',guest:'G004',discovery:'cove',clue:'睡莲池畔的水影里藏着一片旧灯罩。成功收获两次，看看它还记不记得月光。',opening:'灯罩上的星孔还完好。可以等辉潮落进池水，也可以沿两处水边走一圈，把归途的方向记下来。两种办法都能点亮它。',cost:60,branches:{
-    near:{name:'月辉灯',detail:'辉潮时在睡莲池畔成功收获1次。可继续钓鱼等潮水变化，也可使用码头的试潮。',kind:'glow',spot:'cove',need:1},
+  L03:{title:'替月亮留一盏灯',guest:'G004',discovery:'cove',clue:'睡莲池畔的水影里藏着一片旧灯罩。成功收获两次，看看它还记不记得月光。',opening:'灯罩上的星孔还完好。可以等浮光潮落进池水，也可以沿两处水边走一圈，把归途的方向记下来。两种办法都能点亮它。',cost:60,branches:{
+    near:{name:'月辉灯',detail:'浮光潮时在睡莲池畔成功收获1次。可继续钓鱼等潮水变化，也可使用码头的试潮。',kind:'glow',spot:'cove',need:1},
     far:{name:'归途星图',detail:'分别在睡莲池畔、月下木台成功收获1次，潮汐不限。',kind:'tour',spot:'cove',need:2},
   }},
   L04:{title:'远航的回声',guest:'G002',discovery:'pier',clue:'深水栈台下面漂着一枚旧信号片。成功收获两次，顺着回声找到它。',opening:'这枚信号片曾替夜航的船指路。礁岸的星砂能点亮一排航灯；深水的特别访客，也许能带回更远处的回声。',cost:90,branches:{
