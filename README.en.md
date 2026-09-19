@@ -4,7 +4,7 @@
 
 A relaxing fishing and collection plugin for DeepSeek Harness (DSH) Web. Head to the shore and cast a line, or enable automatic fishing and let your character wait for a catch while you use DSH.
 
-**Current main branch: `main` · `0.3.0-preview.9`**. Explore four walkable 3D shores with detailed 2D characters and a pixel-art paper interface. You can build and install the plugin locally from source; it has not been published to npm.
+**Current main branch: `main` · `0.3.0-preview.10`**. Explore four walkable 3D shores with detailed 2D characters and a pixel-art paper interface. You can build and install the plugin locally from source; it has not been published to npm.
 
 The original pixel-art version, `0.1.0-rc.11`, is preserved in full on [archive/pixel-v1-rc11](https://github.com/Nath-Vikky/dsh-fisher/tree/archive/pixel-v1-rc11).
 
@@ -33,7 +33,7 @@ Characters use shaded 2D images that convey depth and are occluded by objects in
 
 The game UI currently uses Chinese. The English instructions below include the Chinese button labels so you can find them in the game.
 
-Aquariums, display shelves, and equipped decorations appear on all four 3D shores. Visitors stroll around the display area and comment on your collection.
+Aquariums, display shelves, and equipped decorations appear on all four 3D shores. Visitors stroll around the display area and comment on your collection. Approach facilities to inspect and arrange them using the bottom action button, or navigate there with “去哪里”. All 24 decorations have distinct geometry, and float movement and splashes reflect different fight patterns.
 
 Each coast has distinct fishing spots and an independent story. Coral Bay, Moonlit Pool, and Deepwater Sea offer branching routes with persistent shore decorations. The automatic Clues goal follows the current story and waits when a choice or construction needs your attention.
 

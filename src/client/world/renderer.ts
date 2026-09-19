@@ -3,7 +3,7 @@ import type {WorldProps} from './contracts.ts';
 import {Scenery,disposeModel} from './scenery.ts';
 import {ActorTextures,SpriteActor} from './actors.ts';
 import {distance,move,nearby,route,screenDirection,walkable} from './map.ts';
-import type {PlaceId,Point,SpotId} from './map.ts';
+import type {Point,SpotId} from './map.ts';
 import {COASTS} from './regions.ts';
 import type {CoastMap} from './regions.ts';
 import {shoreVisitor} from '../../game/shore.ts';
@@ -13,8 +13,12 @@ import type {SpeciesId} from '../../game/content.ts';
 import {Companion} from './companion.ts';
 import {LivingShore,furnishedMap} from './living-shore.ts';
 import {playerFacing} from '../player-motion.ts';
+import {facilityPoints,nearbyFacility,memorialBuilt} from './facilities.ts';
+import type {DestinationId,FacilityId} from './facilities.ts';
+import {FishingFeedback,fishingMotion} from './fishing-feedback.ts';
+import {currentTide} from '../../game/progression.ts';
 
-export interface WorldState {near:PlaceId|null;walking:boolean;destination:PlaceId|null;spot:SpotId;ready:boolean;guestActivity:string}
+export interface WorldState {near:DestinationId|null;walking:boolean;destination:DestinationId|null;spot:SpotId;ready:boolean;guestActivity:string}
 const selectedSpot=(data:WorldProps['data'])=>data.active?.setup?.spot??(data.autoFishing.enabled?automaticSpot(data.autoFishing.goal,data.journey.region,data.shore,Object.keys(data.catalog) as SpeciesId[]):data.shore.spots[data.journey.region]);
 const nextTask=()=>new Promise<void>(resolve=>setTimeout(resolve,0));
 export class CoastWorld {
@@ -22,9 +26,10 @@ export class CoastWorld {
   private scene=new Scene();private camera=new OrthographicCamera();private content=new Group();
   private scenery:Scenery;private shoreScene:ShoreScene;private living:LivingShore;private pictures=new ActorTextures();private player=new SpriteActor(this.pictures);private visitor=new SpriteActor(this.pictures,true);private companion=new Companion(this.pictures);private actorKey='';
   private line:Line;private bobber:Mesh;
+  private feedback=new FishingFeedback();private facilities:Record<FacilityId,Point>;
   private options:WorldProps;
   private map:CoastMap;private position:Point;private spot:SpotId='pier';private input:Point={x:0,z:0};
-  private path:Point[]=[];private destination:PlaceId|null=null;private frame=0;private last=0;private time=0;
+  private path:Point[]=[];private destination:DestinationId|null=null;private frame=0;private last=0;private time=0;
   private ready=false;private disposed=false;private visible=true;private focused=document.hasFocus();private published='';private lastSave=0;private walking=false;
   private resizeObserver:ResizeObserver;private intersection:IntersectionObserver;
   private systemMotion=matchMedia('(prefers-reduced-motion: reduce)');
@@ -33,6 +38,7 @@ export class CoastWorld {
   private savedPosition='';private waterPoint=new Vector3();private uploaded=new WeakSet<object>();private diagnosticAt=0;
   constructor(private canvas:HTMLCanvasElement,options:WorldProps,private changed:(state:WorldState)=>void,private failed:()=>void){
     this.options=options;this.map=furnishedMap(COASTS[options.data.journey.region]);this.position={...this.map.spawn};
+    this.facilities=facilityPoints(this.map);
     this.key=`dsh-fisher:walk:v1:${options.data.saveId}${this.map.id==='L01'?'':`:${this.map.id}`}`;
     try{const saved=JSON.parse(localStorage.getItem(this.key)??'null') as {position?:Point;spot?:string}|null;
       if(saved?.position&&walkable(saved.position,this.map))this.position={...saved.position};if(saved?.spot==='pier'||saved?.spot==='cove')this.spot=saved.spot;
@@ -51,7 +57,7 @@ export class CoastWorld {
     this.visitor.group.position.set(places.guest.x+.8,.145,places.guest.z-.5);this.visitor.face(false);
     const lineGeometry=new BufferGeometry();lineGeometry.setAttribute('position',new Float32BufferAttribute(new Float32Array(9),3));
     this.line=new Line(lineGeometry,new LineBasicMaterial({color:'#657c79',transparent:true,opacity:.8}));this.line.frustumCulled=false;this.content.add(this.line);
-    this.bobber=new Mesh(new SphereGeometry(.065,8,6),new MeshLambertMaterial({color:'#e7a488'}));this.content.add(this.bobber);
+    this.bobber=new Mesh(new SphereGeometry(.065,8,6),new MeshLambertMaterial({color:'#e7a488'}));this.content.add(this.bobber,this.feedback.group);
     this.resizeObserver=new ResizeObserver(this.resize);this.resizeObserver.observe(canvas);
     this.intersection=new IntersectionObserver(entries=>{this.visible=entries.some(entry=>entry.isIntersecting);this.start();});this.intersection.observe(canvas);
     document.addEventListener('visibilitychange',this.visibility);window.addEventListener('blur',this.blur);window.addEventListener('focus',this.focus);
@@ -133,10 +139,10 @@ export class CoastWorld {
     this.input=screenDirection(x,y);if(Math.hypot(x,y)>.12){this.path=[];this.destination=null;}
     this.start();
   }
-  go(id:PlaceId,automatic=false):void {
+  go(id:DestinationId,automatic=false):void {
     if(this.disposed||this.locked&&!automatic||id==='guest'&&!shoreVisitor(this.options.data.shore,this.map.id,this.options.data.life.visitor))return;
-    const target=id==='guest'?this.living.visitorPoint:this.map.places[id];this.path=route(this.position,target,this.map);this.destination=this.path.length?id:null;this.input={x:0,z:0};
-    if(id!=='guest')this.spot=id;this.publish();this.start();
+    const target=id==='guest'?this.living.visitorPoint:id==='pier'||id==='cove'?this.map.places[id]:this.facilities[id];this.path=route(this.position,target,this.map);this.destination=this.path.length?id:null;this.input={x:0,z:0};
+    if(id==='pier'||id==='cove')this.spot=id;this.publish();this.start();
   }
   dock():SpotId|null {
     const at=nearby(this.position,false,this.map);if(at!=='pier'&&at!=='cove'||this.locked)return null;
@@ -177,13 +183,17 @@ export class CoastWorld {
     this.player.animate(pose,this.time,this.reduced,this.camera);
     const visit=this.living.visitor(dt,this.time,this.position,this.reduced||!!active||auto||this.options.overlay||this.destination==='guest');
     if(visit.walking)this.visitor.face(visit.position.x>=this.visitor.group.position.x);this.visitor.group.position.set(visit.position.x,.145,visit.position.z);
-    this.visitor.animate(visit.walking?'walk':'idle',this.time,this.reduced,this.camera);this.living.update(this.time,this.reduced);this.scenery.update(this.reduced?0:this.time);this.shoreScene.update(this.options.data.shore,this.reduced?0:this.time);
+    this.visitor.animate(visit.walking?'walk':'idle',this.time,this.reduced,this.camera);this.living.update(this.time,this.reduced);this.scenery.update(this.reduced?0:this.time,currentTide(this.options.data.journey));this.shoreScene.update(this.options.data.shore,this.reduced?0:this.time);
     this.companion.update(this.companionEnabled,this.position,this.time,walking,!!this.options.guarded,this.reduced,this.map,atSpot?this.spot:null);
     this.line.visible=this.bobber.visible=atSpot;
+    this.feedback.group.visible=false;
     if(atSpot){
       const place=this.map.places[this.spot].water!,tip=this.player.rodTip(),water=this.waterPoint.set(place.x,place.y,place.z);
-      this.bobber.position.copy(water);this.bobber.position.y+=(this.reduced||this.options.paused?0:Math.sin(this.time*2)*.035);
-      const points=this.line.geometry.getAttribute('position');points.setXYZ(0,tip.x,tip.y,tip.z);points.setXYZ(1,(tip.x+water.x)/2,(tip.y+water.y)/2-.08,(tip.z+water.z)/2);points.setXYZ(2,water.x,this.bobber.position.y,water.z);points.needsUpdate=true;
+      const motion=fishingMotion(this.options.simulation,active?.challenge,this.time,this.reduced||this.options.paused);
+      this.bobber.position.set(water.x+motion.x,water.y+motion.y,water.z+motion.z);
+      const end=this.bobber.position,points=this.line.geometry.getAttribute('position');points.setXYZ(0,tip.x,tip.y,tip.z);points.setXYZ(1,(tip.x+end.x)/2,(tip.y+end.y)/2-(motion.danger?.02:.14),(tip.z+end.z)/2);points.setXYZ(2,end.x,end.y,end.z);points.needsUpdate=true;
+      (this.line.material as LineBasicMaterial).color.set(motion.danger?'#eeb18a':'#657c79');
+      this.feedback.update(end.x,water.y,end.z,this.time,motion.strength,motion.danger,this.reduced||this.options.paused);
     }
     if(render)this.renderer.render(this.scene,this.camera);
     const now=performance.now();
@@ -193,7 +203,8 @@ export class CoastWorld {
   }
   private publish(walking=this.walking):void {
     this.walking=walking;
-    const state:WorldState={near:shoreVisitor(this.options.data.shore,this.map.id,this.options.data.life.visitor)&&distance(this.position,this.living.visitorPoint)<=1.2?'guest':nearby(this.position,false,this.map),walking,destination:this.destination,spot:this.spot,ready:this.ready,guestActivity:this.living.activity};
+    const facility=nearbyFacility(this.position,this.facilities,memorialBuilt(this.options.data));
+    const state:WorldState={near:facility??(shoreVisitor(this.options.data.shore,this.map.id,this.options.data.life.visitor)&&distance(this.position,this.living.visitorPoint)<=1.2?'guest':nearby(this.position,false,this.map)),walking,destination:this.destination,spot:this.spot,ready:this.ready,guestActivity:this.living.activity};
     const value=JSON.stringify(state);if(value!==this.published){this.published=value;this.changed(state);}
     const attributes={displayedCollection:String(this.living.visibleCollection),guestActivity:this.living.activity,playerX:this.position.x.toFixed(2),playerZ:this.position.z.toFixed(2),spot:this.spot,actors:'2d-cutouts',shoreStory:this.map.id==='L01'?this.options.data.shore.story:this.options.data.shore.regions[this.map.id].stage,companion:this.companionEnabled??'none',playerFrame:this.player.frame,playerAction:this.player.action,region:this.map.id,playerFacing:this.player.facing.back?'back':'front'};
     for(const [key,text] of Object.entries(attributes))if(this.canvas.dataset[key]!==text)this.canvas.dataset[key]=text;

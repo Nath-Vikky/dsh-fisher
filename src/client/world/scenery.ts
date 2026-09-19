@@ -3,12 +3,15 @@ import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js'
 import {COASTS} from './regions.ts';
 import type {CoastMap} from './regions.ts';
 import {coastWater} from './water.ts';
+import type {Tide} from '../../game/progression.ts';
 
 const COLORS={sand:'#e4d3a8',stone:'#bfc6ad',grass:'#9db879',grassLight:'#b4ca89',grassDark:'#728f5a',earth:'#b7a07b',cream:'#f5e9c9',roof:'#c66c43',roofLight:'#e2965a',wood:'#896240',woodLight:'#c6a777',ink:'#355359',leaf:'#568961',leafLight:'#7eaa70',white:'#fff0d0',flower:'#cc8db0',blue:'#508785',coral:'#dc9a74',glass:'#f6d597'};
 type ColorKey=keyof typeof COLORS;
 type GeometryKey=keyof Scenery['geometries'];
 export class Scenery {
   group=new Group();water=new Group();ripples:Mesh[]=[];
+  private clues:{mesh:Mesh;x:number;z:number;phase:number}[]=[];
+  private clueInk=new MeshStandardMaterial({color:'#396b69',transparent:true,opacity:.72,roughness:1});
   seaMaterial:ReturnType<typeof coastWater>;pondMaterial:ReturnType<typeof coastWater>;
   geometries={box:new BoxGeometry(1,1,1),soft:new RoundedBoxGeometry(1,1,1,1,.09),rock:new DodecahedronGeometry(.5,0),crown:new DodecahedronGeometry(.5,1),trunk:new CylinderGeometry(.5,.58,1,9),disc:new CylinderGeometry(.5,.5,1,24),pot:new CylinderGeometry(.5,.36,1,10),cone:new CylinderGeometry(0,.5,1,12),leaf:new BufferGeometry()};
   materials=Object.fromEntries(Object.entries(COLORS).map(([key,color])=>[key,new MeshStandardMaterial({color,roughness:.9,metalness:0,...key==='leaf'||key==='leafLight'?{side:DoubleSide}:{}})])) as Record<ColorKey,MeshStandardMaterial>;
@@ -48,17 +51,26 @@ export class Scenery {
     this.finish();
     this.group.traverse(object=>{object.updateMatrix();object.matrixAutoUpdate=false;});
     for(const ripple of this.ripples)ripple.matrixAutoUpdate=true;
+    for(const clue of this.clues)clue.mesh.matrixAutoUpdate=true;
   }
   private waterClues():void {
     const shallow=this.map.places.cove.water!,deep=this.map.places.pier.water!;
-    const ink=new MeshStandardMaterial({color:'#396b69',transparent:true,opacity:.72,roughness:1});
+    const ink=this.clueInk;
     const silver=new MeshStandardMaterial({color:'#fff1c5',roughness:.5});
     const shape=new SphereGeometry(1,8,5);
     for(let i=0;i<3;i++){
       const fish=new Mesh(shape,ink);fish.scale.set(.22,.015,.06);fish.rotation.y=i*.6;
       fish.position.set(shallow.x-.35+i*.35,shallow.y+.018,shallow.z+.2*(i%2));this.water.add(fish);
+      this.clues.push({mesh:fish,x:fish.position.x,z:fish.position.z,phase:i});
       const bubble=new Mesh(shape,silver);bubble.scale.setScalar(.035+i*.012);
       bubble.position.set(deep.x-.25+i*.21,deep.y+.025,deep.z+.15*(i%2));this.water.add(bubble);
+      if(this.map.id!=='L01'){
+        const mark=new Mesh(new TorusGeometry(.13+i*.055,.009,3,this.map.id==='L02'?6:24),silver);mark.rotation.x=-Math.PI/2;mark.position.set(shallow.x+(i-1)*.36,shallow.y+.027,shallow.z-.25);
+        if(this.map.id==='L02')mark.scale.set(1,.6,1);
+        if(this.map.id==='L03'){mark.scale.set(.65,.65,1);silver.emissive.set('#b8dcba');silver.emissiveIntensity=.6;}
+        if(this.map.id==='L04'){mark.position.x=deep.x;mark.position.z=deep.z;mark.scale.set(1.6,1.6,1);}
+        this.water.add(mark);this.clues.push({mesh:mark,x:mark.position.x,z:mark.position.z,phase:i+3});
+      }
     }
   }
   private homeCoast():void{
@@ -74,7 +86,11 @@ export class Scenery {
     this.add('trunk','wood',.56,.54,2.7,.1,1.05,.1);this.add('soft','cream',.56,.94,2.7,.66,.36,.09);this.add('box','blue',.56,.95,2.76,.35,.045,.025,0,-.18);
     this.add('box','wood',-1,.5,-.68,.12,.9,.12);this.add('soft','blue',-1,1,-.68,.42,.36,.35);this.add('box','ink',-1,1,-.493,.24,.045,.02);
   }
-  update(time:number):void{this.seaMaterial.uniforms.time!.value=time;this.pondMaterial.uniforms.time!.value=time;for(let i=0;i<this.ripples.length;i++)this.ripples[i]!.scale.setScalar(1+Math.sin(time*1.2+i)*.12);}
+  update(time:number,tide:Tide='calm'):void{
+    this.seaMaterial.uniforms.time!.value=time;this.pondMaterial.uniforms.time!.value=time;for(let i=0;i<this.ripples.length;i++)this.ripples[i]!.scale.setScalar(1+Math.sin(time*1.2+i)*.12);
+    this.clueInk.color.set(tide==='glow'?'#b9ead2':tide==='odd'?'#c6a2d5':'#396b69');this.clueInk.emissive.set(tide==='glow'?'#8fbb9e':'#000000');this.clueInk.emissiveIntensity=.4;
+    for(const clue of this.clues){clue.mesh.position.x=clue.x+Math.sin(time*.65+clue.phase)*.06;clue.mesh.position.z=clue.z+Math.cos(time*.4+clue.phase)*.035;}
+  }
   private land(scale:number,y:number,depth:number,color:ColorKey):void{
     const shape=new Shape();this.map.coastline.forEach(([x,z],i)=>{if(i===0)shape.moveTo(x*scale,-z*scale);else shape.lineTo(x*scale,-z*scale);});shape.closePath();
     const geometry=new ExtrudeGeometry(shape,{depth,bevelEnabled:true,bevelSegments:2,steps:1,bevelSize:.1,bevelThickness:.025});geometry.rotateX(-Math.PI/2);

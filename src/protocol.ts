@@ -11,7 +11,7 @@ import type { DecorId, DecorSlot } from './game/decor.ts';
 import type { AutoCast,AutoFishingView,AutoGoal } from './game/auto-fishing.ts';
 import type { ShoreState, SpotId } from './game/shore.ts';
 import type {CompanionId} from './game/companions.ts';
-export const VERSION = '0.3.0-preview.9';
+export const VERSION = '0.3.0-preview.10';
 export const API = '/api/dsh-fisher/v1';
 export const COAST_ASSET = `${API}/assets/l01-coast-pixel-v1.webp`;
 export type LauncherStatus='shore'|'fishing'|'waiting';

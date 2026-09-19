@@ -2,21 +2,21 @@ import {BoxGeometry,Group,Mesh,MeshStandardMaterial,Sprite,SpriteMaterial} from 
 import type {Bootstrap} from '../../protocol.ts';
 import {spriteName} from '../../game/content.ts';
 import {thumbnailAsset} from '../../game/art.ts';
-import {decor} from '../../game/decor.ts';
+import type {DecorId,DecorSlot} from '../../game/decor.ts';
+import {CORNERS} from './facilities.ts';
+import {decorModel,disposeDecor} from './decor-models.ts';
 import type {ActorTextures} from './actors.ts';
 import type {CoastMap} from './regions.ts';
 import type {Point} from './map.ts';
 import {distance,move,route,walkable} from './map.ts';
 
-const CORNERS:Record<CoastMap['id'],Point>={L01:{x:1.2,z:-.65},L02:{x:1.5,z:.2},L03:{x:1,z:2.35},L04:{x:.6,z:-.9}};
-const COLORS={afternoon:'#af9874',coral:'#e4a385',moon:'#7e91b4',deep:'#647e9d'};
 export function furnishedMap(map:CoastMap):CoastMap {
   const p=CORNERS[map.id];
   return {...map,circles:[...(map.circles??[]),[p.x,p.z,.6],[p.x+1.55,p.z,.43],[p.x-1.35,p.z,.38]]};
 }
 export class LivingShore {
   group=new Group();private box=new BoxGeometry(1,1,1);private wood=new MeshStandardMaterial({color:'#b69b75',roughness:.88});
-  private slots=new Map<string,{group:Group;material:MeshStandardMaterial}>();private sprites:Sprite[]=[];private spriteMaterials:SpriteMaterial[]=[];
+  private slots=new Map<DecorSlot,{group:Group;id:DecorId|null}>();private sprites:Sprite[]=[];private spriteMaterials:SpriteMaterial[]=[];
   private key='';private generation=0;private disposed=false;private fishCount=0;private files:(string|null)[]=[];
   private visitorPath:Point[]=[];private nextVisit=0;private place=0;private actorPosition:Point|null=null;activity='在岸边等你';
   private pictures:ActorTextures;private map:CoastMap;
@@ -28,20 +28,7 @@ export class LivingShore {
     this.cube(this.group,water,0,.77,0,1.23,.7,.61);
     for(const x of [-.66,.66])this.cube(this.group,this.wood,x,.73,0,.05,.8,.73);
     for(const y of [.39,1.12])this.cube(this.group,this.wood,0,y,.35,1.35,.045,.035);
-    for(const y of [.22,.64,1.06])this.cube(this.group,this.wood,1.55,y,0,.86,.065,.53);
-    for(const x of [1.1,2])this.cube(this.group,this.wood,x,.55,-.15,.055,1.15,.36);
-    for(const slot of ['ground','seat','lamp','sign','background','shelf']){
-      const group=new Group(),material=new MeshStandardMaterial({color:'#c5b392',roughness:.8});this.slots.set(slot,{group,material});this.group.add(group);
-      if(slot==='ground')this.cube(group,material,.3,.015,0,3.5,.03,1.4);
-      if(slot==='seat'){
-        this.cube(group,material,-1.35,.43,0,.9,.12,.55);this.cube(group,material,-1.35,.79,-.23,.9,.55,.08);
-        for(const x of [-1.68,-1.02])this.cube(group,this.wood,x,.2,0,.08,.4,.48);
-      }
-      if(slot==='lamp'){this.cube(group,this.wood,2.3,.64,-.1,.07,1.28,.07);this.cube(group,material,2.3,1.36,-.1,.25,.32,.25);material.emissive.set('#ead798');material.emissiveIntensity=.55;}
-      if(slot==='sign'){this.cube(group,this.wood,-2,.35,.1,.055,.7,.055);this.cube(group,material,-2,.78,.1,.66,.4,.07);}
-      if(slot==='background')this.cube(group,material,0,.76,-.32,1.27,.68,.04);
-      if(slot==='shelf')this.cube(group,material,1.55,.65,-.24,.87,1,.04);
-    }
+    for(const slot of ['ground','seat','lamp','sign','background','shelf'] as const){const group=decorModel(slot,null);group.visible=slot==='seat'||slot==='shelf';this.slots.set(slot,{group,id:null});this.group.add(group);}
     for(let i=0;i<14;i++){
       const material=new SpriteMaterial({alphaTest:.12,depthWrite:false,toneMapped:false}),sprite=new Sprite(material);sprite.scale.setScalar(i<8?.29:.32);sprite.visible=false;sprite.renderOrder=3;
       this.sprites.push(sprite);this.spriteMaterials.push(material);this.group.add(sprite);
@@ -56,7 +43,7 @@ export class LivingShore {
     })].map(file=>file?thumbnailAsset(file):null);
     const key=JSON.stringify([files,data.life.decor]);if(key===this.key)return false;this.key=key;const generation=++this.generation;
     this.files=files;this.fishCount=files.slice(0,8).filter(Boolean).length;
-    for(const [slot,value] of this.slots){const id=data.life.decor[slot as keyof typeof data.life.decor];value.group.visible=slot==='seat'||!!id;value.material.color.set(id?COLORS[decor(id).theme]:'#b69b75');}
+    for(const [slot,value] of this.slots){const id=data.life.decor[slot]??null;if(value.id!==id){this.group.remove(value.group);disposeDecor(value.group);value.group=decorModel(slot,id);value.id=id;this.group.add(value.group);}value.group.visible=slot==='seat'||slot==='shelf'||!!id;}
     await Promise.all(files.filter((file):file is string=>!!file).map(file=>this.pictures.load(file)));
     if(this.disposed||generation!==this.generation)return false;
     for(let i=0;i<14;i++){const material=this.spriteMaterials[i]!,texture=files[i]?this.pictures.textures.get(files[i]!):undefined;if(!!texture!==!!material.map)material.needsUpdate=true;material.map=texture??null;this.sprites[i]!.visible=!!texture;}

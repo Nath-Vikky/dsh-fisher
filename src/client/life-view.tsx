@@ -21,7 +21,7 @@ import { createHelp,createPager } from './compact-ui.tsx';
 import { createConversation } from './conversation.tsx';
 import {createPreparedPortrait,retainConversationArt} from './portrait-art.tsx';
 
-interface Props { data:Bootstrap; controller:GameController; blocked:boolean; onFish:()=>void; reducedMotion?:boolean; lowPerformance?:boolean }
+interface Props { data:Bootstrap; controller:GameController; blocked:boolean; onFish:()=>void; reducedMotion?:boolean; lowPerformance?:boolean; displayOnly?:boolean; initialDisplay?:'aquarium'|'shelf'|'decor'|'shop' }
 type Art = ReactTypes.ComponentType<{id:SpeciesId;variant?:Variant|null;large?:boolean}>;
 const rewardText=(coins:number,tokens:number)=>[coins?`${coins} 壳币`:'',tokens?`${tokens} 潮汐碎片`:''].filter(Boolean).join(' · ');
 const catchLabel=(item:Catch)=>`${species(item.speciesId).name}${item.lengthMm===null?'':` ${(item.lengthMm/10).toFixed(1)} cm`}${item.variant?` · ${VARIANT_NAMES[item.variant]}`:''} · ${item.id.slice(-5)}`;
@@ -93,8 +93,8 @@ export function createLifeView(React:typeof ReactTypes,FishArt:Art) {
       {chat&&<Conversation definition={definition} outfit={state.outfit} onClose={()=>setChat(false)}/>}
     </article>;
   }
-  function Display({data,controller,blocked,reducedMotion=false,lowPerformance=false}:Omit<Props,'onFish'>) {
-    const [area,setArea]=React.useState<'aquarium'|'shelf'|'decor'|'shop'|null>(null),[page,setPage]=React.useState(0),[theme,setTheme]=React.useState<(typeof THEMES)[number]>(THEMES[0]!);
+  function Display({data,controller,blocked,reducedMotion=false,lowPerformance=false,initialDisplay}:Omit<Props,'onFish'>) {
+    const [area,setArea]=React.useState<'aquarium'|'shelf'|'decor'|'shop'|null>(initialDisplay??null),[page,setPage]=React.useState(0),[theme,setTheme]=React.useState<(typeof THEMES)[number]>(THEMES[0]!);
     const creatures=data.inventory.filter(item=>species(item.speciesId).creature),objects=data.inventory.filter(item=>!species(item.speciesId).creature);
     const relics=SPECIES.filter(item=>item.kind==='relic'&&data.catalog[item.id]);
     const names={aquarium:'布置鱼缸',shelf:'整理陈列架',decor:'码头与卡片',shop:'装饰小铺'};
@@ -123,6 +123,7 @@ export function createLifeView(React:typeof ReactTypes,FishArt:Art) {
     const visitor=section==='guests'?GUESTS.find(item=>item.id===selected):undefined;
     const detailed=!!(quest||achievement||visitor);
     const open=(id:NonNullable<typeof section>)=>{controller.pause();setSection(id);setSelected(null);setPage(0);setPortrait(false);};
+    if(props.displayOnly)return <Display {...props}/>;
     return <section className="dsh-fisher-collection dsh-fisher-life" aria-label="海岸手记">
       <div className="dsh-fisher-collection-intro"><h3>海岸上的小事，慢慢记</h3><small>已完成 {life.questsCompleted} 份委托 · {QUESTS.length} 种故事起点</small></div>
       <div className="dsh-fisher-guests-strip">{GUESTS.map(definition=><button key={definition.id} aria-label={`查看${definition.name}的手记`} onClick={()=>{open('guests');setSelected(definition.id);}}><img src={`${API}/assets/${thumbnailAsset(guestPicture(definition.id,life.guests[definition.id].outfit,'chibi')!)}`} alt=""/><small>{definition.name}</small></button>)}</div>
