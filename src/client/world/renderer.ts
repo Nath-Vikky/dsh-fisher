@@ -102,12 +102,13 @@ export class CoastWorld {
   private focus=()=>{this.focused=true;this.start();};
   private contextLost=(event:Event)=>{event.preventDefault();if(!this.disposed){this.canvas.dataset.renderState='lost';this.dispose();this.failed();}};
   private get reduced(){return this.options.reducedMotion||this.systemMotion.matches;}
-  private get companionEnabled(){const data=this.options.data;return data.active?data.active.challenge.guard==='A002':data.shore.companion==='A002';}
+  private get companionEnabled(){const data=this.options.data;return data.active?data.active.setup?.companion??(data.active.challenge.guard==='A002'?'A002':null):data.shore.companion;}
   private get suspended(){return this.disposed||!this.ready||!this.visible||document.hidden||!this.focused||this.options.overlay;}
   private get locked(){return this.options.blocked||!!this.options.data.active||!!this.options.data.pending||this.options.data.autoFishing.enabled;}
   update(options:WorldProps):void {
     const before=this.options;this.options=options;
     if(this.disposed)return;
+    if(options.companionPlay!==before.companionPlay)this.companion.play(this.time);
     if(options.data.life!==before.data.life)void this.living.sync(options.data).then(changed=>{if(changed&&!this.disposed){this.renderer.shadowMap.needsUpdate=true;this.start();}}).catch(()=>{if(!this.disposed){this.dispose();this.failed();}});
     // Let the catch reaction play when the reward overlay releases the scene.
     if(options.data.shore.story!==before.data.shore.story||JSON.stringify(options.data.shore.regions)!==JSON.stringify(before.data.shore.regions))this.renderer.shadowMap.needsUpdate=true;
@@ -177,7 +178,7 @@ export class CoastWorld {
     const visit=this.living.visitor(dt,this.time,this.position,this.reduced||!!active||auto||this.options.overlay||this.destination==='guest');
     if(visit.walking)this.visitor.face(visit.position.x>=this.visitor.group.position.x);this.visitor.group.position.set(visit.position.x,.145,visit.position.z);
     this.visitor.animate(visit.walking?'walk':'idle',this.time,this.reduced,this.camera);this.living.update(this.time,this.reduced);this.scenery.update(this.reduced?0:this.time);this.shoreScene.update(this.options.data.shore,this.reduced?0:this.time);
-    this.companion.update(this.companionEnabled,this.position,this.time,walking,!!this.options.guarded,this.reduced,this.map);
+    this.companion.update(this.companionEnabled,this.position,this.time,walking,!!this.options.guarded,this.reduced,this.map,atSpot?this.spot:null);
     this.line.visible=this.bobber.visible=atSpot;
     if(atSpot){
       const place=this.map.places[this.spot].water!,tip=this.player.rodTip(),water=this.waterPoint.set(place.x,place.y,place.z);
@@ -194,7 +195,7 @@ export class CoastWorld {
     this.walking=walking;
     const state:WorldState={near:shoreVisitor(this.options.data.shore,this.map.id,this.options.data.life.visitor)&&distance(this.position,this.living.visitorPoint)<=1.2?'guest':nearby(this.position,false,this.map),walking,destination:this.destination,spot:this.spot,ready:this.ready,guestActivity:this.living.activity};
     const value=JSON.stringify(state);if(value!==this.published){this.published=value;this.changed(state);}
-    const attributes={displayedCollection:String(this.living.visibleCollection),guestActivity:this.living.activity,playerX:this.position.x.toFixed(2),playerZ:this.position.z.toFixed(2),spot:this.spot,actors:'2d-cutouts',shoreStory:this.options.data.shore.story,companion:this.companionEnabled?'A002':'none',playerFrame:this.player.frame,playerAction:this.player.action,region:this.map.id,playerFacing:this.player.facing.back?'back':'front'};
+    const attributes={displayedCollection:String(this.living.visibleCollection),guestActivity:this.living.activity,playerX:this.position.x.toFixed(2),playerZ:this.position.z.toFixed(2),spot:this.spot,actors:'2d-cutouts',shoreStory:this.map.id==='L01'?this.options.data.shore.story:this.options.data.shore.regions[this.map.id].stage,companion:this.companionEnabled??'none',playerFrame:this.player.frame,playerAction:this.player.action,region:this.map.id,playerFacing:this.player.facing.back?'back':'front'};
     for(const [key,text] of Object.entries(attributes))if(this.canvas.dataset[key]!==text)this.canvas.dataset[key]=text;
   }
   private persist():void {const value=JSON.stringify({position:this.position,spot:this.spot});if(value===this.savedPosition)return;try{localStorage.setItem(this.key,value);this.savedPosition=value;}catch{/* Optional view preferences never block fishing. */}}

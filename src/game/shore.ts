@@ -6,12 +6,13 @@ import type { Catch } from './engine.ts';
 import { species } from './content.ts';
 import {emptyRegionalStories,isStoryRegion,REGIONAL_STORIES} from './regional-stories.ts';
 import type {RegionalStory,StoryRegion} from './regional-stories.ts';
+import type {CompanionId} from './companions.ts';
 
 export const SPOT_IDS = ['pier', 'cove'] as const;
 export type SpotId = typeof SPOT_IDS[number];
 export const STORY_STAGES = ['quiet','bottle','charted','recovered','built'] as const;
 export type ShoreStory = typeof STORY_STAGES[number];
-export interface ShoreState { spots: Record<RegionId, SpotId>; story: ShoreStory; searched: number; timber: number; companion:'A002'|null; regions:Record<StoryRegion,RegionalStory> }
+export interface ShoreState { spots: Record<RegionId, SpotId>; story: ShoreStory; searched: number; timber: number; companion:CompanionId|null; regions:Record<StoryRegion,RegionalStory> }
 export function emptyShore(): ShoreState { return { spots: { L01:'pier', L02:'pier', L03:'pier', L04:'pier' },story:'quiet',searched:0,timber:0,companion:null,regions:emptyRegionalStories() }; }
 export function isSpot(value: unknown): value is SpotId { return value === 'pier' || value === 'cove'; }
 export function waterClue(spot: SpotId, tide: Tide,region:RegionId='L01'): { title: string; detail: string } {

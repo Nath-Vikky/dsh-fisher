@@ -1,14 +1,14 @@
 import type * as ReactTypes from 'react';
-import { API } from '../protocol.ts';
 import type { Bootstrap } from '../protocol.ts';
 import type { GameController } from './controller.ts';
 import { buildingFish,SHORE_STORY } from '../game/shore.ts';
 import { displayed } from '../game/goals.ts';
-import { species,spriteName } from '../game/content.ts';
+import { species } from '../game/content.ts';
 import { createPager } from './compact-ui.tsx';
 import { createDialog } from './dialog.tsx';
 import {createRegionalJournal} from './regional-journal.tsx';
 import {isStoryRegion} from '../game/regional-stories.ts';
+import {createCompanionJournal} from './companion-journal.tsx';
 
 export const BOTTLE_CONVERSATION = [
   {speaker:'guest',text:'这张草图上的三道短线，是老码头的木桩。有人把报平安的铃声，寄给了很久以后的我们。'},
@@ -17,8 +17,8 @@ export const BOTTLE_CONVERSATION = [
 ] as const;
 
 export function createShoreJournal(React:typeof ReactTypes){
-  const Pager=createPager(React),Dialog=createDialog(React),RegionalJournal=createRegionalJournal(React);
-  return function ShoreJournal({data,controller,disabled,onRead,onFish}:{data:Bootstrap;controller:GameController;disabled:boolean;onRead:()=>void;onFish:()=>void}){
+  const Pager=createPager(React),Dialog=createDialog(React),RegionalJournal=createRegionalJournal(React),CompanionJournal=createCompanionJournal(React);
+  return function ShoreJournal({data,controller,disabled,onRead,onFish,onPlay}:{data:Bootstrap;controller:GameController;disabled:boolean;onRead:()=>void;onFish:()=>void;onPlay:()=>void}){
     const [selected,setSelected]=React.useState<string|null>(null),[confirmed,setConfirmed]=React.useState(false),[page,setPage]=React.useState(0);
     const [tab,setTab]=React.useState<'story'|'companion'>('story'),[donating,setDonating]=React.useState(false);
     const shore=data.shore,story=SHORE_STORY[shore.story],local=data.journey.region==='L01';
@@ -28,12 +28,7 @@ export function createShoreJournal(React:typeof ReactTypes){
     React.useEffect(()=>{if(shore.timber===2||shore.story!=='recovered')setDonating(false);},[shore.timber,shore.story]);
     return <div className="dsh-fisher-shore-journal">
       <div className="dsh-fisher-shore-tabs"><button aria-pressed={tab==='story'} onClick={()=>setTab('story')}>本岸故事</button><button aria-pressed={tab==='companion'} onClick={()=>setTab('companion')}>岸边伙伴</button></div>
-      {tab==='companion'?<><img className="dsh-fisher-companion-portrait" src={`${API}/assets/${spriteName('A002','original')}`} alt="穿着护卫服的刀盾狗"/>
-        <h3>刀盾狗 · 小小护卫</h3><p>跟你在岸边走走。每竿遇到高张力的冲击或断线危险时，会护线一次，降低张力并挡住接下来的一阵冲击。</p>
-        {!data.catalog.A002&&<p>先在摸鱼塘收藏刀盾狗，就能邀请它。栈桥、怪味饵和奇潮更容易遇见奇珍异兽。</p>}
-        <button className="dsh-fisher-primary" disabled={disabled||!data.catalog.A002} onClick={()=>void controller.action({type:'shore.companion',companion:shore.companion?null:'A002'})}>{shore.companion?'让刀盾狗歇一会儿':'邀请刀盾狗同行'}</button>
-        {data.active&&<small>更换从下一竿生效。这一竿的护线机会保持原样。</small>}
-      </>:isStoryRegion(data.journey.region)?<RegionalJournal key={data.journey.region} data={data} controller={controller} disabled={disabled} onRead={onRead} onFish={onFish}/>:<><h3>{story.title}</h3><p>{story.detail}</p><p className="dsh-fisher-shore-next">{story.next}</p>
+      {tab==='companion'?<CompanionJournal data={data} controller={controller} disabled={disabled} onPlay={onPlay}/>:isStoryRegion(data.journey.region)?<RegionalJournal key={data.journey.region} data={data} controller={controller} disabled={disabled} onRead={onRead} onFish={onFish}/>:<><h3>{story.title}</h3><p>{story.detail}</p><p className="dsh-fisher-shore-next">{story.next}</p>
         {!local&&<p>这段故事发生在摸鱼塘，去码头切换海岸后可以继续。</p>}
         {shore.story==='quiet'&&<small>浅湾收获 {shore.searched}/2 · 手动与自动都计入</small>}
         {shore.story==='bottle'&&<button className="dsh-fisher-primary" disabled={disabled||!local} onClick={onRead}>请贝邮解读</button>}

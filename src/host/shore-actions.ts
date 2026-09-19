@@ -4,6 +4,7 @@ import { buildingFish } from '../game/shore.ts';
 import { requireDisposable,requireState } from './actions-common.ts';
 import { id } from './validation.ts';
 import {isStoryRegion,REGIONAL_STORIES} from '../game/regional-stories.ts';
+import {isCompanion} from '../game/companions.ts';
 
 export function applyShoreAction(save:Save,action:Action):boolean {
   const shore=save.shore;
@@ -17,7 +18,7 @@ export function applyShoreAction(save:Save,action:Action):boolean {
       state.choice=action.choice;state.progress=0;state.spots=[];state.stage='seeking';return true;
     }
     case 'shore.companion':
-      requireState(action.companion===null||action.companion==='A002'&&!!save.catalog.A002,'先在图鉴里遇见刀盾狗');
+      requireState(action.companion===null||isCompanion(action.companion)&&!!save.catalog[action.companion],'先在图鉴里遇见这位伙伴');
       shore.companion=action.companion;return true;
     case 'shore.read':
       requireState(shore.story==='bottle','这封信已经读过，或还未发现');

@@ -16,7 +16,7 @@ const GOAL_CARDS:Record<AutoGoal,{icon:CoastIconName;summary:string;note:string}
   relax:{icon:'fish',summary:'随缘收好每份渔获',note:'沿用你选择的落点，所有收获都留下。'},
   catalog:{icon:'book',summary:'寻找还没遇见的收获',note:'新发现更容易上钩，每竿会多等一会儿。'},
   coins:{icon:'coin',summary:'出售重复的普通鱼',note:'首次发现、纪录和特殊外观都会留下。'},
-  clues:{icon:'compass',summary:'跟进摸鱼塘的故事',note:'自动寻找线索，读信和修建时等你回来。'},
+  clues:{icon:'compass',summary:'跟进当前海岸的故事',note:'自动寻找线索，选择和布置时等你回来。'},
 };
 
 interface Props { data:Bootstrap; controller:GameController; disabled:boolean }
@@ -41,7 +41,7 @@ export function createAutoFishingView(React:typeof ReactTypes){
     if(!auto&&!enabled)return <div className="dsh-fisher-auto-equipment"><small>使用当前鱼饵与装备</small><button onClick={onHarbor} disabled={disabled}>整理装备 <span aria-hidden="true">›</span></button></div>;
     const heading=!enabled?'已暂停，进度为你保留':data.autoFishing.reason?'等你回来处理':data.autoFishing.working?'正在自动钓鱼':'已就位，等待 DSH 活动';
     return <section className="dsh-fisher-auto-progress" data-working={enabled&&data.autoFishing.working}><div className="dsh-fisher-play-heading"><h3><i aria-hidden="true"/>{heading}</h3><small>{AUTO_GOAL_NAMES[cast?.setup?.autoGoal??data.autoFishing.goal]}</small></div>
-      {auto?<><div className="dsh-fisher-meter-row"><div><span>有效活动 {fishingTime(auto.elapsedMs)} / {fishingTime(auto.requiredMs)}</span><b>{percent}%</b></div>
+      {auto?<>{cast?.companionHint&&<p>{cast.companionHint}</p>}{cast?.setup?.companion==='A004'&&<small>香蕉猫的小雨 · 这一竿所需时间已减少10%</small>}<div className="dsh-fisher-meter-row"><div><span>有效活动 {fishingTime(auto.elapsedMs)} / {fishingTime(auto.requiredMs)}</span><b>{percent}%</b></div>
         <div className="dsh-fisher-meter" role="meter" aria-label="自动钓鱼进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}><i style={{width:`${percent}%`}}/></div></div>
         <div className="dsh-fisher-auto-actions"><button className="dsh-fisher-primary" disabled={disabled} onClick={()=>void controller.action({type:'auto.takeover',castId:cast!.id})}>接管这一竿</button>
           <button disabled={disabled} onClick={onCancel}>收起这一竿</button></div></>

@@ -4,6 +4,7 @@ import type { SpeciesId,RegionId } from './content.ts';
 import { SPECIES } from './content.ts';
 import type { ShoreState,SpotId } from './shore.ts';
 import {isStoryRegion,regionalSpot,regionalPause} from './regional-stories.ts';
+import type {CompanionId} from './companions.ts';
 
 export const AUTO_GOALS=['relax','catalog','coins','clues'] as const;
 export type AutoGoal=typeof AUTO_GOALS[number];
@@ -24,11 +25,11 @@ export interface AutoFishingState {
 export interface AutoFishingView extends AutoFishingState { working:boolean }
 export const emptyAutoFishing=():AutoFishingState=>({enabled:false,caught:0,seen:0,recent:[],reason:null,goal:'relax',sold:0,earnedCoins:0,recentSold:[]});
 
-export function autoFishingDuration(item:Catch,goal?:AutoGoal):number {
+export function autoFishingDuration(item:Catch,goal?:AutoGoal,companion?:CompanionId|null):number {
   const def=species(item.speciesId),tier=def.rarity??(def.kind==='relic'?4:def.kind==='guest'?2:3);
   const base=[60_000,120_000,240_000,480_000][tier-1]!;
   const appearance=item.variant==='starsand'?2:item.variant==='pearl'?1.5:1;
-  return Math.min(1200000,Math.round(base*appearance*((item.quality??0)>=950?1.25:1)*(goal==='catalog'?1.25:1)));
+  return Math.round(Math.min(1200000,Math.round(base*appearance*((item.quality??0)>=950?1.25:1)*(goal==='catalog'?1.25:1)))*(companion==='A004'?.9:1));
 }
 export function automaticSpot(goal:AutoGoal,region:RegionId,shore:ShoreState,known:readonly SpeciesId[]):SpotId {
   if(goal==='relax')return shore.spots[region];

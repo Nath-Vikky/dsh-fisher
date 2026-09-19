@@ -7,6 +7,7 @@ import { verifyContent } from '../game/content-check.ts';
 import { applyShoreAction } from './shore-actions.ts';
 import { isSpot, recordShoreCatch } from '../game/shore.ts';
 import {recordRegionalCatch} from '../game/regional-stories.ts';
+import {companionHint} from '../game/companions.ts';
 import { rollEncounter } from '../game/encounters.ts';
 import { gear, isGearId } from '../game/gear.ts';
 import { bait, consumeOverride, finishTide, isBaitId, isInventorySpecies, isTide, levelInfo, regionUnlocked } from '../game/progression.ts';
@@ -70,7 +71,7 @@ export class FisherService {
       autoFishing:{...this.save.autoFishing,reason,working:!reason&&this.observingWork&&this.save.autoFishing.enabled&&Object.values(this.runtime.roots).some(root=>root.until>this.clock().mono)},
       active: active ? { id: active.id, owner: active.owner, ownerEpoch: active.ownerEpoch, leaseUntil: active.leaseUntil,
         castRevision: active.castRevision, inputCursor: active.inputCursor, paused: active.paused,
-        challenge: active.challenge, simulation: active.simulation,setup:active.meta,automatic:active.automatic??null } : null,
+        challenge: active.challenge, simulation: active.simulation,setup:active.meta,automatic:active.automatic??null,companionHint:companionHint(active.catch,active.meta.companion) } : null,
       pending: this.save.pending, lastOutcome: this.save.lastOutcome });
   }
   get observingWork(): boolean { return this.store.pluginEnabled && (this.save.work.enabled||this.save.autoFishing.enabled) && !this.stopped && !this.writeError && !this.store.issue; }
@@ -404,13 +405,14 @@ export class FisherService {
     try{selected=rollEncounter(seed,castId,mode,journey,Object.keys(save.catalog) as SpeciesId[],save.shore.spots[journey.region],automatic?save.autoFishing.goal:undefined);}
     catch(error){throw new ActionError(error instanceof Error?error.message:'没有匹配的候选');}
     if(save.shore.companion==='A002')selected.challenge.guard='A002';
+    selected.meta.companion=save.shore.companion;
     if(journey.bait==='B08')journey.invitations=journey.invitations.filter(item=>item!==selected.catch.speciesId);
     else if(journey.bait!=='B01')journey.baits[journey.bait]!--;
     consumeOverride(journey);
     const cast:PrivateCast={id:castId,seed,catch:selected.catch,challenge:selected.challenge,meta:selected.meta,
       owner:clientId,ownerEpoch:1,leaseUntil:automatic?0:Date.now()+15000,castRevision:0,inputCursor:0,paused:automatic,
       simulation:automatic?{...initialSimulation(),phase:'waiting'}:initialSimulation(),
-      automatic:automatic?{elapsedMs:0,requiredMs:autoFishingDuration(selected.catch,selected.meta.autoGoal)}:null};
+      automatic:automatic?{elapsedMs:0,requiredMs:autoFishingDuration(selected.catch,selected.meta.autoGoal,selected.meta.companion)}:null};
     save.active=cast;save.lastOutcome=null;return cast;
   }
   private advanceAutomatic(save:Save,ms:number):void {

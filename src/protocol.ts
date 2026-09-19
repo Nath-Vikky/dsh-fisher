@@ -10,7 +10,8 @@ import type { GuestId } from './game/guests.ts';
 import type { DecorId, DecorSlot } from './game/decor.ts';
 import type { AutoCast,AutoFishingView,AutoGoal } from './game/auto-fishing.ts';
 import type { ShoreState, SpotId } from './game/shore.ts';
-export const VERSION = '0.3.0-preview.8';
+import type {CompanionId} from './game/companions.ts';
+export const VERSION = '0.3.0-preview.9';
 export const API = '/api/dsh-fisher/v1';
 export const COAST_ASSET = `${API}/assets/l01-coast-pixel-v1.webp`;
 export type LauncherStatus='shore'|'fishing'|'waiting';
@@ -20,7 +21,7 @@ export interface PluginPreferences { enabled:boolean; writable:boolean; launcher
 export interface RecordEntry { count: number; bestLengthMm: number | null; bestWeightG: number | null; variants: Partial<Record<Variant,number>> }
 export interface ActiveCast {
   id: string; owner: string; ownerEpoch: number; leaseUntil: number; castRevision: number; inputCursor: number;
-  paused: boolean; challenge: Challenge; simulation: Simulation; setup?: EncounterMeta; automatic?:AutoCast|null;
+  paused: boolean; challenge: Challenge; simulation: Simulation; setup?: EncounterMeta; automatic?:AutoCast|null; companionHint?:string|null;
 }
 export interface Bootstrap {
   protocolVersion: 1; version: string; generation: string; revision: number; saveId: string;
@@ -53,7 +54,7 @@ export type Action =
   | { type: 'work.claim'; packId: string; bait: SupplyBait }
   | { type: 'auto.enable'; enabled:boolean }
   | { type: 'auto.goal'; goal:AutoGoal }
-  | { type: 'shore.companion'; companion:'A002'|null }
+  | { type: 'shore.companion'; companion:CompanionId|null }
   | { type: 'auto.takeover'; castId:string }
   | { type: 'auto.ack'; through:number }
   | { type: 'quest.accept'|'quest.skip'; questId:string }

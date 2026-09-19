@@ -143,6 +143,16 @@ test('companion is collection-gated and changing it never rewrites a committed c
     assert.equal(decodeSave(await s.exportSave()).save.active!.challenge.guard,'A002');
   },save);
 });
+test('frog scouting stays with the frozen cast after switching companions and reopening the save',async()=>{
+  const save=emptySave();for(const id of ['A013','A004'] as const)save.catalog[id]={count:1,bestLengthMm:300,bestWeightG:500,variants:{original:1}};
+  await fixture(async(s,dir)=>{
+    await send(s,{type:'shore.companion',companion:'A013'});await send(s,{type:'cast.begin',mode:'assisted'});
+    const cast=s.snapshot().active!;assert.match(cast.companionHint!,/奶蛙看见鱼影/);assert.equal(cast.setup?.companion,'A013');assert.equal(cast.challenge.guard,undefined);
+    await send(s,{type:'shore.companion',companion:'A004'});assert.equal(s.snapshot().active?.companionHint,cast.companionHint);
+    const frozen=decodeSave(await s.exportSave()).save.active;await s.close();const reopened=new FisherService(new SaveStore(dir));await reopened.initialize();
+    try{assert.equal(reopened.snapshot().active?.companionHint,cast.companionHint);assert.deepEqual(decodeSave(await reopened.exportSave()).save.active,frozen);}finally{await reopened.close();}
+  },save);
+});
 test('the guard absorbs one burst, persists in replay, and cannot recharge on later bursts',()=>{
   const challenge={seed:0,waitTicks:50,pattern:'dart',mode:'standard',rulesVersion:2,modifiers:modifiers({rod:'D01',line:'N01',float:'U01'}),size:500,guard:'A002'} as const;
   const start={...initialSimulation(),phase:'fighting',tick:100,fightTicks:79,tension:600000,reel:true} as const;

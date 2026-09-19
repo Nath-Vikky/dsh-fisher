@@ -8,8 +8,9 @@ import type { BaitId, Journey, Tide } from './progression.ts';
 import type { AutoGoal } from './auto-fishing.ts';
 import { spotWeights, spotPreference } from './shore.ts';
 import type { SpotId } from './shore.ts';
+import type {CompanionId} from './companions.ts';
 export type EncounterSource = 'random' | 'pity' | 'target' | 'invitation' | 'tutorial' | 'legacy';
-export interface EncounterMeta { source:EncounterSource; region:RegionId; bait:BaitId; tide:Tide; spot?:SpotId; autoGoal?:AutoGoal }
+export interface EncounterMeta { source:EncounterSource; region:RegionId; bait:BaitId; tide:Tide; spot?:SpotId; autoGoal?:AutoGoal; companion?:CompanionId|null }
 export function weighted<T>(items: readonly T[], weight:(item:T)=>number, random:()=>number): T {
   const total=items.reduce((sum,item)=>sum+weight(item),0);
   if (!(total>0)) throw new Error('没有匹配的候选，鱼饵未消耗');

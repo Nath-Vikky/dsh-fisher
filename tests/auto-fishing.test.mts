@@ -177,3 +177,15 @@ test('clue goal stops after a persistent discovery and continues at the pier aft
     assert.equal(s.snapshot().active?.setup?.autoGoal,'clues');
   },save);
 });
+
+test('banana companion shortens activity duration without rerolling or repricing an existing cast',async()=>{
+  const save=emptySave();save.catalog.A004={count:1,bestLengthMm:250,bestWeightG:260,variants:{original:1}};
+  await fixture(async({open,emit,time})=>{
+    const s=await open();await send(s,{type:'shore.companion',companion:'A004'});await send(s,{type:'auto.enable',enabled:true});emit(s,0,'start');time(1000);await s.flushWork();
+    const frozen=decodeSave(await s.exportSave()).save.active!,duration=frozen.automatic!.requiredMs;
+    assert.equal(duration,Math.round(autoFishingDuration(frozen.catch,frozen.meta.autoGoal)*.9));assert.equal(frozen.meta.companion,'A004');
+    await send(s,{type:'shore.companion',companion:null});assert.equal(s.snapshot().active!.automatic!.requiredMs,duration);
+    let at=1000;while(at<duration){emit(s,at,'activity');at=Math.min(duration,at+20000);time(at);await s.flushWork();}
+    assert.equal(s.snapshot().autoFishing.caught,1);assert.equal(s.snapshot().inventory[0]!.id,frozen.id);assert.equal(s.snapshot().inventory[0]!.price,frozen.catch.price);
+  },save);
+});

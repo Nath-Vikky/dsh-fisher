@@ -18,19 +18,21 @@ import type { AutoFishingState } from '../game/auto-fishing.ts';
 import { emptyShore, isSpot, STORY_STAGES } from '../game/shore.ts';
 import type { ShoreState } from '../game/shore.ts';
 import {emptyRegionalStories,STORY_REGIONS,REGIONAL_STAGES,REGIONAL_STORIES} from '../game/regional-stories.ts';
+import {isCompanion} from '../game/companions.ts';
+import type {CompanionId} from '../game/companions.ts';
 import { object, integer, id } from './validation.ts';
 export { object, integer, id } from './validation.ts';
 
 export interface PrivateCast extends ActiveCast { seed: number; catch: Catch; meta: EncounterMeta }
 export interface Receipt { id: string; fingerprint: string; revision: number }
 export interface Save {
-  formatVersion: 9; rulesVersion: 2; contentVersion: 4; id: string; revision: number;
+  formatVersion: 10; rulesVersion: 2; contentVersion: 4; id: string; revision: number;
   coins: number; tokens: number; research: number; experience: number; released: number;
   inventory: Catch[]; catalog: Bootstrap['catalog']; active: PrivateCast | null; pending: Catch | null;
   lastOutcome: Bootstrap['lastOutcome']; receipts: Receipt[]; shore: ShoreState; journey: Journey; work: WorkState; life: LifeState; autoFishing:AutoFishingState;
 }
 export function emptySave(): Save {
-  const save:Save={ formatVersion: 9, rulesVersion: 2, contentVersion: 4, id: randomUUID(), revision: 0,
+  const save:Save={ formatVersion: 10, rulesVersion: 2, contentVersion: 4, id: randomUUID(), revision: 0,
     coins: 100, tokens: 0, research: 0, experience: 0, released: 0, inventory: [], catalog: {},
     active: null, pending: null, lastOutcome: null, receipts: [], shore:emptyShore(), journey:emptyJourney(), work:emptyWork(),life:emptyLife(),autoFishing:emptyAutoFishing() };
   refreshLife(save);return save;
@@ -52,7 +54,7 @@ function validCatch(value: unknown, complete = true): asserts value is Catch {
 }
 export function validateSave(value: unknown): asserts value is Save {
   const data = object(value);
-  if (data.formatVersion !== 9 || data.rulesVersion !== 2 || data.contentVersion !== 4) throw new Error('UNSUPPORTED_SAVE_VERSION');
+  if (data.formatVersion !== 10 || data.rulesVersion !== 2 || data.contentVersion !== 4) throw new Error('UNSUPPORTED_SAVE_VERSION');
   id(data.id); integer(data.revision); integer(data.coins, 0, 9999999); integer(data.tokens, 0, 99999);
   integer(data.research); integer(data.experience); integer(data.released);
   if (!Array.isArray(data.inventory) || data.inventory.length > 240) throw new Error('Invalid inventory');
@@ -97,6 +99,10 @@ export function validateSave(value: unknown): asserts value is Save {
     if (!isRegionId(meta.region)||meta.region!==(cast.catch as Catch).region||!isBaitId(meta.bait)||!isTide(meta.tide)
       ||!['random','pity','target','invitation','tutorial','legacy'].includes(String(meta.source))) throw new Error('Invalid encounter metadata');
     if (meta.spot!==undefined&&!isSpot(meta.spot)) throw new Error('Invalid fishing spot');
+    if(meta.companion!==undefined){
+      if(meta.companion!==null&&!isCompanion(meta.companion))throw new Error('Invalid cast companion');
+      if((meta.companion==='A002')!==(challenge.guard==='A002'))throw new Error('Invalid frozen companion guard');
+    }
     const sim = object(cast.simulation);
     integer(sim.tick, 0, 3800); integer(sim.fightTicks, 0, 3600); integer(sim.progress, 0, 1000000);
     integer(sim.tension, 0, 1000000); integer(sim.danger, 0, 300000); integer(sim.rollbacks, 0, 2);
@@ -108,7 +114,7 @@ export function validateSave(value: unknown): asserts value is Save {
     if (!['casting', 'waiting', 'bite', 'fighting','recovery'].includes(String(sim.phase))) throw new Error('Invalid active phase');
     if (sim.phase==='recovery' && (sim.fightTicks!==3600 || cast.paused!==true)) throw new Error('Invalid recovery');
     if(cast.automatic!==null&&cast.automatic!==undefined){
-      const auto=object(cast.automatic),duration=autoFishingDuration(cast.catch as Catch,meta.autoGoal as import('../game/auto-fishing.ts').AutoGoal|undefined);
+      const auto=object(cast.automatic),duration=autoFishingDuration(cast.catch as Catch,meta.autoGoal as import('../game/auto-fishing.ts').AutoGoal|undefined,meta.companion as CompanionId|null|undefined);
       if(auto.requiredMs!==duration||cast.paused!==true||sim.phase!=='waiting'||sim.tick!==0||sim.fightTicks!==0||sim.progress!==0)throw new Error('Invalid automatic cast');
       integer(auto.elapsedMs,0,duration-1);
     }
@@ -125,7 +131,7 @@ export function validateSave(value: unknown): asserts value is Save {
   }
   const shore=object(data.shore),spots=object(shore.spots);
   if(!STORY_STAGES.some(stage=>stage===shore.story))throw new Error('Invalid shore story');
-  if(shore.companion!==null&&(shore.companion!=='A002'||!object(data.catalog).A002))throw new Error('Invalid shore companion');
+  if(shore.companion!==null&&(!isCompanion(shore.companion)||!object(data.catalog)[shore.companion]))throw new Error('Invalid shore companion');
   integer(shore.searched,0,2);integer(shore.timber,0,2);
   if(shore.story==='quiet'?shore.searched===2:shore.searched!==2)throw new Error('Invalid shore story progress');
   if(shore.story!=='recovered'&&shore.timber!==0)throw new Error('Invalid building materials');
@@ -204,7 +210,8 @@ function validateJourney(value:unknown): void {
 
 export function upgradeSave(value:unknown): Save {
   const data=structuredClone(object(value));
-  if(data.formatVersion===9){validateSave(data);return data;}
+  if(data.formatVersion===10){validateSave(data);return data;}
+  if(data.formatVersion===9){data.formatVersion=10;return upgradeSave(data);}
   if(data.formatVersion===8){data.shore={...object(data.shore),regions:emptyRegionalStories()};data.formatVersion=9;return upgradeSave(data);}
   if(data.formatVersion===7){data.shore={...object(data.shore),companion:null};data.autoFishing={...object(data.autoFishing),goal:'relax',sold:0,earnedCoins:0,recentSold:[]};data.formatVersion=8;return upgradeSave(data);}
   if(data.formatVersion===6){data.shore={...object(data.shore),story:'quiet',searched:0,timber:0};data.formatVersion=7;return upgradeSave(data);}
