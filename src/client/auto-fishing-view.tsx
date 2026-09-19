@@ -10,6 +10,7 @@ import { createHelp,createPager } from './compact-ui.tsx';
 import { createDialog } from './dialog.tsx';
 import { createCoastIcon } from './coast-icons.tsx';
 import type { CoastIconName } from './coast-icons.tsx';
+import { createActivitySwitch } from './activity-switch.tsx';
 
 const GOAL_CARDS:Record<AutoGoal,{icon:CoastIconName;summary:string;note:string}>={
   relax:{icon:'fish',summary:'随缘收好每份渔获',note:'沿用你选择的落点，所有收获都留下。'},
@@ -20,20 +21,14 @@ const GOAL_CARDS:Record<AutoGoal,{icon:CoastIconName;summary:string;note:string}
 
 interface Props { data:Bootstrap; controller:GameController; disabled:boolean }
 export function createAutoFishingView(React:typeof ReactTypes){
-  const Help=createHelp(React),Dialog=createDialog(React),Pager=createPager(React),Icon=createCoastIcon(React);
+  const Help=createHelp(React),Dialog=createDialog(React),Pager=createPager(React),Icon=createCoastIcon(React),ActivitySwitch=createActivitySwitch(React);
   function Controls({data,controller,disabled,onHistory,compact=false}:Props&{onHistory:()=>void;compact?:boolean}){
     const enabled=data.autoFishing.enabled;
-    return <><div className="dsh-fisher-auto-controls" data-compact={compact}>
-      <button type="button" className="dsh-fisher-auto-switch" role="switch" aria-label="自动钓鱼" aria-checked={enabled} disabled={disabled}
-        onClick={()=>void controller.action({type:'auto.enable',enabled:!enabled})}>
-        <span className="dsh-fisher-auto-emblem"><Icon name="auto"/></span>
-        <span className="dsh-fisher-auto-switch-copy"><strong>自动钓鱼</strong><small>{enabled?'已开启 · 随 DSH 活动进行':'未开启 · 点一下，让海岸替你钓'}</small></span>
-        <span className="dsh-fisher-auto-switch-track" aria-hidden="true"><span>{enabled?'开':'关'}</span><i/></span>
-      </button>
+    return <><ActivitySwitch title="自动钓鱼" description={enabled?'已开启 · 随 DSH 活动进行':'未开启 · 点一下，让海岸替你钓'} icon="auto" enabled={enabled} disabled={disabled} compact={compact} onChange={enabled=>void controller.action({type:'auto.enable',enabled})}>
       <Help label="自动钓鱼说明"><p>开启后，随 DSH 的模型响应和工具活动积累钓鱼时间。连续30秒没有新活动或等待确认时暂停；关掉海岸小窗仍可继续，退出 DSH 后保留进度。</p>
         <p>普通产物约需1分钟有效活动，越稀有越久，珠光、星砂和巨物还会延长。随心钓沿用所选落点，其他目标可选择落点；鱼饵不变。默认收好产物，攒壳币会出售符合条件的重复普通鱼；满包、缺饵时暂停。</p>
         <p>接管会关闭自动模式，保留同一份产物，并把已等待的比例转为收线进度，最后一段由你完成。只观察活动信号，不读取思考、聊天或工具正文。</p></Help>
-    </div>{!compact&&<section className="dsh-fisher-auto-plan" aria-label="托管目标">
+    </ActivitySwitch>{!compact&&<section className="dsh-fisher-auto-plan" aria-label="托管目标">
       <div className="dsh-fisher-auto-section-heading"><strong>这次想钓什么</strong><Help label="托管目标说明"><p>{AUTO_GOAL_DETAILS[data.autoFishing.goal]}</p></Help></div>
       <div className="dsh-fisher-auto-goals">{AUTO_GOALS.map(goal=><button key={goal} disabled={disabled} aria-pressed={data.autoFishing.goal===goal} onClick={()=>void controller.action({type:'auto.goal',goal})}>
         <Icon name={GOAL_CARDS[goal].icon}/><span><strong>{AUTO_GOAL_NAMES[goal]}</strong><small>{GOAL_CARDS[goal].summary}</small></span><i aria-hidden="true">{data.autoFishing.goal===goal?'✓':''}</i>

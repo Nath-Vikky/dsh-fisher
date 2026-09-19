@@ -6,7 +6,6 @@ import { BAITS, TIDES, TIDE_NAMES, bait, currentTide, isBaitId, levelInfo, regio
 import { GEAR, GEAR_ART,gear } from '../game/gear.ts';
 import { categoryProbabilities, preferenceAvailable } from '../game/encounters.ts';
 import type { GameController } from './controller.ts';
-import { SUPPLY_BAITS } from '../game/work.ts';
 import type { SupplyBait } from '../game/work.ts';
 import { createScene } from './coast-scene.tsx';
 import { createStorageView } from './storage-view.tsx';
@@ -14,9 +13,10 @@ import { createDialog } from './dialog.tsx';
 import { createHelp,createPager } from './compact-ui.tsx';
 import { BAIT_ART,SCENE_ART } from '../game/visuals.ts';
 import { thumbnailAsset } from '../game/art.ts';
+import { createWorkSupplyView } from './work-supply-view.tsx';
 
 export function createHarbor(React:typeof ReactTypes) {
-  const Scene=createScene(React),Storage=createStorageView(React),Dialog=createDialog(React),Help=createHelp(React),Pager=createPager(React);
+  const Scene=createScene(React),Storage=createStorageView(React),Dialog=createDialog(React),Help=createHelp(React),Pager=createPager(React),WorkSupply=createWorkSupplyView(React);
   const names={location:'选择钓点',bait:'鱼饵盒',tide:'潮相',gear:'鱼具小铺',work:'DSH 补给',storage:'本机存档'};
   return function Harbor({data,controller,blocked,lowPerformance,reducedMotion,storageBusy}:{data:Bootstrap;controller:GameController;blocked:boolean;lowPerformance:boolean;reducedMotion:boolean;storageBusy:boolean}) {
     const [section,setSection]=React.useState<keyof typeof names|null>(null),[supplyBait,setSupplyBait]=React.useState<SupplyBait>('B02');
@@ -32,14 +32,7 @@ export function createHarbor(React:typeof ReactTypes) {
       <div className="dsh-fisher-scene dsh-fisher-harbor-scene"><Scene data={data} lowPerformance={lowPerformance} reducedMotion={reducedMotion} quiet paused={!!section}/></div>
       <div className="dsh-fisher-menu-grid">{(Object.keys(names) as (keyof typeof names)[]).map((id,index)=><button key={id} className="dsh-fisher-menu-button" aria-haspopup="dialog" onClick={()=>open(id)}><small>0{index+1} / {names[id]}</small><strong>{summaries[id]}</strong><span aria-hidden="true">↗</span></button>)}</div>
       {section&&<Dialog title={names[section]} busy={controller.getSnapshot().busy} error={controller.getSnapshot().error} onRetry={()=>void controller.retry()} onClose={()=>setSection(null)} className="dsh-fisher-harbor dsh-fisher-detail-window">
-        {section==='work'&&<>
-          <div className="dsh-fisher-card-heading"><label className="dsh-fisher-toggle"><input type="checkbox" checked={data.work.enabled} disabled={blocked} onChange={event=>void controller.action({type:'work.enable',enabled:event.target.checked})}/>启用 DSH 工作补给</label><Help label="DSH 补给说明"><p>仅从启用后的新活动累计，只观察回合边界与事件到达，不读取聊天内容，不发起模型请求。关闭小窗仍可积累，关闭开关或禁用插件停止观察。</p><p>每180秒活动 +2 足迹；完整回合 +5，相邻完成奖励至少间隔60秒，多会话合并计时。每10足迹获得1包，最多储备12包，每日最多120足迹。</p><p>每包20壳币、1潮汐碎片和两份自选鱼饵；储备不会过期。下次日限额重置：{new Date(data.work.nextResetAt).toLocaleString()}。</p></Help></div>
-          <div className="dsh-fisher-stat-grid"><div><strong>{data.work.packs.length}<small> / 12</small></strong><span>补给储备</span></div><div><strong>{data.work.points}<small> / 10</small></strong><span>当前足迹</span></div></div>
-          <p>本日足迹 {data.work.dailyPoints}/120 · 活动 {Math.floor(data.work.activeMs/1000)}/180 秒</p>
-          {(data.work.packs.length===12||data.work.dailyPoints===120)&&<p role="status">当前积分已暂停，领取储备或日限额重置后继续。</p>}
-          <label>补给中的鱼饵<select aria-label="补给中的鱼饵" value={supplyBait} disabled={blocked} onChange={event=>{if(SUPPLY_BAITS.some(id=>id===event.target.value))setSupplyBait(event.target.value as SupplyBait);}}>{SUPPLY_BAITS.map(id=><option key={id} value={id}>{bait(id).name} ×2</option>)}</select></label>
-          <button className="dsh-fisher-primary" disabled={blocked||!data.work.packs.length||(journey.baits[supplyBait]??0)>9997} onClick={()=>{const packId=data.work.packs[0];if(packId)void controller.action({type:'work.claim',packId,bait:supplyBait});}}>领取 1 包补给</button>
-        </>}
+        {section==='work'&&<WorkSupply data={data} controller={controller} disabled={blocked} selected={supplyBait} onSelect={setSupplyBait}/>}
         {section==='location'&&<><div className="dsh-fisher-location-grid">{REGIONS.map(item=>{const unlocked=regionUnlocked(item.id,data.experience,data.research),selected=journey.region===item.id;return <button key={item.id} className="dsh-fisher-location-card" aria-label={`前往${item.name}`} aria-pressed={selected} disabled={blocked||!idle||!unlocked||selected} onClick={()=>void controller.action({type:'location.select',region:item.id})}><img src={`${API}/assets/${SCENE_ART[item.id]}`} alt={`${item.name}场景`} loading="lazy"/><strong>{item.name}</strong><small>{selected?'当前码头':unlocked?'前往这里':`Lv.${item.level} · 研究 ${item.research}`}</small></button>;})}</div><p>{region(journey.region).mood}</p><small>{level.needed?`手册升级还需 ${level.needed-level.current} 经验`:'海岸故事继续累积'}</small>{!idle&&<p>处理完这一竿，再调整钓点和装备。</p>}</>}
         {section==='bait'&&<>
           <nav className="dsh-fisher-subtabs" aria-label="鱼饵分类"><button aria-pressed={!baitShop} onClick={()=>{setBaitShop(false);setPage(0);}}>选用鱼饵</button><button aria-pressed={baitShop} onClick={()=>{setBaitShop(true);setPage(0);}}>补充鱼饵</button></nav>

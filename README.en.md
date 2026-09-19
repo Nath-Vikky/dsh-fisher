@@ -4,7 +4,7 @@
 
 A relaxing fishing and collection plugin for DeepSeek Harness (DSH) Web. Head to the shore and cast a line, or enable automatic fishing and let your character wait for a catch while you use DSH.
 
-**Current main branch: `main` · `0.3.0-preview.4`**. Explore four walkable 3D shores with detailed 2D characters and a pixel-art paper interface. You can build and install the plugin locally from source; it has not been published to npm.
+**Current main branch: `main` · `0.3.0-preview.5`**. Explore four walkable 3D shores with detailed 2D characters and a pixel-art paper interface. You can build and install the plugin locally from source; it has not been published to npm.
 
 The original pixel-art version, `0.1.0-rc.11`, is preserved in full on [archive/pixel-v1-rc11](https://github.com/Nath-Vikky/dsh-fisher/tree/archive/pixel-v1-rc11).
 
@@ -47,6 +47,10 @@ Focus the scene before using the arrow keys / WASD. Manual fishing pauses when y
 Open “托管” (Auto) on the right and turn on the prominent “自动钓鱼” (Automatic fishing) switch. Your character walks back to the selected fishing spot and uses your current bait and equipment. Fishing progresses with DSH model responses and tool activity. By default, catches go into your inventory or collection automatically, with a summary when you return. Use the goal cards to choose “随心钓” (Relax), “补图鉴” (Collection), “攒壳币” (Coins), or “找线索” (Clues). Collection favors undiscovered entries at the cost of longer waits. Coins sells eligible duplicate ordinary fish in their original appearance, preserving first discoveries, records, and special appearances. Clues waits for your input after a discovery. Goal changes apply to the next cast. Automatic fishing pauses if the inventory is full or bait runs out.
 
 Select “接管这一竿” (Take over this cast) to switch to manual fishing while retaining the catch and progress already accumulated. Automatic fishing is off by default and is independent of work supplies. It can continue while the game window is closed, but no offline time is credited after you exit DSH or qualifying activity stops.
+
+### DSH work supplies
+
+Open “码头 → DSH 补给” (Dock → DSH supplies) and enable “工作补给” (Work supplies). DSH activity earns points toward supply packs. The page shows stored packs and progress toward the next one. Choose a bait tile and claim a pack for 20 shell coins, 1 tide shard, and 2 portions of that bait. Stored packs remain available when the switch is off; open “!” for timing rules and the daily limit.
 
 ### Shore stories and companions
 
