@@ -3,7 +3,7 @@ import test from 'node:test';
 import { randomUUID,createHash } from 'node:crypto';
 import { mkdir,mkdtemp,rm,writeFile } from 'node:fs/promises';
 import { resolve,join,relative,isAbsolute } from 'node:path';
-import { emptySave,upgradeSave } from '../src/host/model.ts';
+import { emptySave,upgradeSave,validateSave } from '../src/host/model.ts';
 import type { Save } from '../src/host/model.ts';
 import { SaveStore } from '../src/host/store.ts';
 import { FisherService } from '../src/host/service.ts';
@@ -12,6 +12,8 @@ import { categoryProbabilities,rollEncounter } from '../src/game/encounters.ts';
 import type { Action,ActionRequest,InputRequest } from '../src/protocol.ts';
 import { step,initialSimulation,replay } from '../src/game/engine.ts';
 import { modifiers } from '../src/game/gear.ts';
+import {recordRegionalCatch} from '../src/game/regional-stories.ts';
+import {automaticSpot,cluePause} from '../src/game/auto-fishing.ts';
 
 const root=resolve(import.meta.dirname,'../tmp');
 function request(s:FisherService,action:Action):ActionRequest {
@@ -43,15 +45,56 @@ test('v5 migration preserves an existing cast, inventory and catalog without rer
     assert.equal(upgraded.shore.spots.L01,'pier');assert.equal(old.formatVersion,5);
   });
 });
-test('water clues change actual encounter odds while directed catches and other coasts stay intact',()=>{
+test('all coast clues change actual encounter odds while directed catches stay intact',()=>{
   const shallow=categoryProbabilities('L01','B01','calm','cove'),deep=categoryProbabilities('L01','B01','calm','pier');
   assert.ok(shallow[0]!>deep[0]!);assert.ok(deep[1]!>shallow[1]!);assert.ok(deep[2]!>shallow[2]!);
-  assert.deepEqual(categoryProbabilities('L02','B01','calm','cove'),categoryProbabilities('L02','B01','calm','pier'));
+  for(const region of ['L02','L03','L04'] as const){const a=categoryProbabilities(region,'B01','calm','cove'),b=categoryProbabilities(region,'B01','calm','pier');assert.ok(a[0]!>b[0]!);assert.ok(b[1]!>a[1]!&&b[2]!>a[2]!);}
   const j=emptySave().journey;j.tutorialDone=true;j.bait='B07';j.target='A002';j.completed.L01=10;
   for(const spot of ['pier','cove'] as const){const rolled=rollEncounter(98,'same','assisted',j,[],spot);assert.equal(rolled.catch.speciesId,'A002');assert.equal(rolled.meta.source,'target');}
   j.bait='B01';j.target=null;
   let different=0;for(let seed=0;seed<100;seed++)if(rollEncounter(seed,'a','assisted',j,[],'cove').catch.speciesId!==rollEncounter(seed,'a','assisted',j,[],'pier').catch.speciesId)different++;
   assert.ok(different>10);
+});
+
+test('v8 migration preserves the original story and frozen cast, adding only separate regional progress',async()=>{
+  await fixture(async(s)=>{
+    await send(s,{type:'cast.begin',mode:'assisted'});
+    const current=decodeSave(await s.exportSave()).save,old=structuredClone(current) as unknown as Record<string,unknown>;
+    old.formatVersion=8;delete (old.shore as Record<string,unknown>).regions;
+    const migrated=upgradeSave(old);assert.deepEqual(migrated.active,old.active);assert.deepEqual(migrated.inventory,old.inventory);
+    const {regions,...original}=migrated.shore;assert.deepEqual(original,old.shore);assert.equal(regions.L02.stage,'quiet');assert.equal(regions.L03.choice,null);
+  });
+});
+
+test('regional stories persist, select an automatic route, and build once without consuming catches',async()=>{
+  const save=emptySave();save.experience=100000;save.research=49;save.journey.tutorialDone=true;save.journey.region='L02';save.coins=1000;
+  await fixture(async(s)=>{
+    await land(s,'pier');assert.equal(s.snapshot().shore.regions.L02.found,0);
+    await land(s,'cove');await land(s,'cove');assert.equal(s.snapshot().shore.regions.L02.stage,'found');assert.ok(cluePause('L02',s.snapshot().shore));
+    await send(s,{type:'shore.choose',choice:'far'});assert.equal(automaticSpot('clues','L02',s.snapshot().shore,[]),'pier');
+    await land(s,'pier');const route=s.snapshot().shore.regions.L02;assert.equal(route.progress,1);
+    assert.deepEqual(decodeSave(await s.exportSave()).save.shore.regions.L02,route);
+    await send(s,{type:'location.select',region:'L03'});assert.equal(s.snapshot().shore.regions.L03.found,0);
+    await send(s,{type:'location.select',region:'L02'});await land(s,'pier');assert.equal(s.snapshot().shore.regions.L02.stage,'ready');
+    const before=s.snapshot(),build=request(s,{type:'shore.build'});await s.mutate(build,false);await s.mutate(build,false);
+    assert.equal(s.snapshot().coins,before.coins-40);assert.deepEqual(s.snapshot().inventory,before.inventory);assert.equal(s.snapshot().shore.regions.L02.stage,'built');
+    await assert.rejects(send(s,{type:'shore.build'}),/备齐/);await assert.rejects(send(s,{type:'shore.choose',choice:'near'}),/更换/);
+  },save);
+});
+
+test('moon and deep story objectives enforce tides, distinct spots and unusual catches',()=>{
+  const save=emptySave(),states=save.shore.regions,item=rollEncounter(1,'story','guided',save.journey,[]).catch;
+  states.L03={stage:'seeking',found:2,choice:'near',progress:0,spots:[]};
+  recordRegionalCatch(states,{source:'random',region:'L03',bait:'B01',tide:'calm',spot:'cove'},item);assert.equal(states.L03.progress,0);
+  recordRegionalCatch(states,{source:'random',region:'L03',bait:'B01',tide:'glow',spot:'cove'},item);assert.equal(states.L03.stage,'ready');
+  states.L03={stage:'seeking',found:2,choice:'far',progress:0,spots:[]};
+  for(let i=0;i<2;i++)recordRegionalCatch(states,{source:'random',region:'L03',bait:'B01',tide:'calm',spot:'cove'},item);
+  assert.equal(states.L03.progress,1);assert.equal(automaticSpot('clues','L03',save.shore,[]),'pier');
+  recordRegionalCatch(states,{source:'random',region:'L03',bait:'B01',tide:'calm',spot:'pier'},item);assert.equal(states.L03.stage,'ready');
+  states.L04={stage:'seeking',found:2,choice:'far',progress:0,spots:[]};
+  recordRegionalCatch(states,{source:'random',region:'L04',bait:'B01',tide:'calm',spot:'pier'},item);assert.equal(states.L04.progress,0);
+  recordRegionalCatch(states,{source:'random',region:'L04',bait:'B01',tide:'calm',spot:'pier'},{...item,speciesId:'R004'});assert.equal(states.L04.stage,'ready');
+  validateSave(save);states.L03.progress=1;assert.throws(()=>validateSave(save),/story progress/);
 });
 
 async function land(s:FisherService,spot:'pier'|'cove') {

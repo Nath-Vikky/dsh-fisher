@@ -89,7 +89,7 @@ export class SaveStore {
       if(this.workDisabled){save.work.enabled=false;save.autoFishing.enabled=false;}
       const original=await readFile(join(this.directory,'save.json'),'utf8');
       const source=object(object(JSON.parse(original)).save),sourceVersion=source.formatVersion;
-      const backupName=sourceVersion===1||sourceVersion===2||sourceVersion===3||sourceVersion===4||sourceVersion===5||sourceVersion===6||sourceVersion===7?`save.before-v${sourceVersion+1}.json`
+      const backupName=sourceVersion===1||sourceVersion===2||sourceVersion===3||sourceVersion===4||sourceVersion===5||sourceVersion===6||sourceVersion===7||sourceVersion===8?`save.before-v${sourceVersion+1}.json`
         :source.contentVersion===2?'save.before-content3.json':source.contentVersion===3?'save.before-content4.json':null;
       if (!this.issue && backupName) {
         const backupPath=join(this.directory,backupName);
@@ -171,7 +171,7 @@ export class SaveStore {
     try {
       await this.suppressWork(save.id);
       // The durable reset intent precedes removal of this plugin's enumerated save files.
-      const owned=/^save(?:\.backup|\.before-v[2345678]|\.before-content[34]|\.before-restore\.[12])?\.json(?:\.[0-9a-f-]{36}\.tmp)?$/;
+      const owned=/^save(?:\.backup|\.before-v[23456789]|\.before-content[34]|\.before-restore\.[12])?\.json(?:\.[0-9a-f-]{36}\.tmp)?$/;
       for(const name of await readdir(this.directory))if(owned.test(name))await unlink(join(this.directory,name));
       await atomicFile(join(this.directory,'save.backup.json'),body);
       await atomicFile(join(this.directory,'save.json'),body);

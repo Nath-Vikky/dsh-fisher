@@ -110,7 +110,7 @@ export class CoastWorld {
     if(this.disposed)return;
     if(options.data.life!==before.data.life)void this.living.sync(options.data).then(changed=>{if(changed&&!this.disposed){this.renderer.shadowMap.needsUpdate=true;this.start();}}).catch(()=>{if(!this.disposed){this.dispose();this.failed();}});
     // Let the catch reaction play when the reward overlay releases the scene.
-    if(options.data.shore.story!==before.data.shore.story)this.renderer.shadowMap.needsUpdate=true;
+    if(options.data.shore.story!==before.data.shore.story||JSON.stringify(options.data.shore.regions)!==JSON.stringify(before.data.shore.regions))this.renderer.shadowMap.needsUpdate=true;
     if(options.pose==='surprise'&&before.pose!=='surprise')this.celebrateUntil=this.time+1.1;
     this.visitor.group.visible=!!shoreVisitor(options.data.shore,this.map.id,options.data.life.visitor);
     const visitor=shoreVisitor(options.data.shore,this.map.id,options.data.life.visitor),key=`${visitor??''}|${visitor?options.data.life.guests[visitor].outfit:'base'}|${options.data.journey.loadout.rod}|${this.companionEnabled}`;

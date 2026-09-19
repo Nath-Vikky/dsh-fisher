@@ -17,19 +17,20 @@ import { emptyAutoFishing,autoFishingDuration,isAutoGoal } from '../game/auto-fi
 import type { AutoFishingState } from '../game/auto-fishing.ts';
 import { emptyShore, isSpot, STORY_STAGES } from '../game/shore.ts';
 import type { ShoreState } from '../game/shore.ts';
+import {emptyRegionalStories,STORY_REGIONS,REGIONAL_STAGES,REGIONAL_STORIES} from '../game/regional-stories.ts';
 import { object, integer, id } from './validation.ts';
 export { object, integer, id } from './validation.ts';
 
 export interface PrivateCast extends ActiveCast { seed: number; catch: Catch; meta: EncounterMeta }
 export interface Receipt { id: string; fingerprint: string; revision: number }
 export interface Save {
-  formatVersion: 8; rulesVersion: 2; contentVersion: 4; id: string; revision: number;
+  formatVersion: 9; rulesVersion: 2; contentVersion: 4; id: string; revision: number;
   coins: number; tokens: number; research: number; experience: number; released: number;
   inventory: Catch[]; catalog: Bootstrap['catalog']; active: PrivateCast | null; pending: Catch | null;
   lastOutcome: Bootstrap['lastOutcome']; receipts: Receipt[]; shore: ShoreState; journey: Journey; work: WorkState; life: LifeState; autoFishing:AutoFishingState;
 }
 export function emptySave(): Save {
-  const save:Save={ formatVersion: 8, rulesVersion: 2, contentVersion: 4, id: randomUUID(), revision: 0,
+  const save:Save={ formatVersion: 9, rulesVersion: 2, contentVersion: 4, id: randomUUID(), revision: 0,
     coins: 100, tokens: 0, research: 0, experience: 0, released: 0, inventory: [], catalog: {},
     active: null, pending: null, lastOutcome: null, receipts: [], shore:emptyShore(), journey:emptyJourney(), work:emptyWork(),life:emptyLife(),autoFishing:emptyAutoFishing() };
   refreshLife(save);return save;
@@ -51,7 +52,7 @@ function validCatch(value: unknown, complete = true): asserts value is Catch {
 }
 export function validateSave(value: unknown): asserts value is Save {
   const data = object(value);
-  if (data.formatVersion !== 8 || data.rulesVersion !== 2 || data.contentVersion !== 4) throw new Error('UNSUPPORTED_SAVE_VERSION');
+  if (data.formatVersion !== 9 || data.rulesVersion !== 2 || data.contentVersion !== 4) throw new Error('UNSUPPORTED_SAVE_VERSION');
   id(data.id); integer(data.revision); integer(data.coins, 0, 9999999); integer(data.tokens, 0, 99999);
   integer(data.research); integer(data.experience); integer(data.released);
   if (!Array.isArray(data.inventory) || data.inventory.length > 240) throw new Error('Invalid inventory');
@@ -129,6 +130,18 @@ export function validateSave(value: unknown): asserts value is Save {
   if(shore.story==='quiet'?shore.searched===2:shore.searched!==2)throw new Error('Invalid shore story progress');
   if(shore.story!=='recovered'&&shore.timber!==0)throw new Error('Invalid building materials');
   for(const region of REGION_IDS)if(!isSpot(spots[region]))throw new Error('Invalid saved fishing spot');
+  const stories=object(shore.regions);
+  for(const region of STORY_REGIONS){
+    const state=object(stories[region]);if(!REGIONAL_STAGES.some(stage=>stage===state.stage))throw new Error('Invalid regional story');
+    const early=state.stage==='quiet'||state.stage==='found';
+    integer(state.found,state.stage==='quiet'?0:2,state.stage==='quiet'?1:2);
+    if(early?state.choice!==null:state.choice!=='near'&&state.choice!=='far')throw new Error('Invalid story choice');
+    const branch=state.choice===null?null:REGIONAL_STORIES[region].branches[state.choice as 'near'|'far'];
+    integer(state.progress,0,branch?.need??0);
+    if(state.stage==='seeking'?state.progress===branch!.need:!early&&state.progress!==branch!.need)throw new Error('Invalid story progress');
+    if(!Array.isArray(state.spots)||state.spots.length>2||state.spots.some(spot=>!isSpot(spot))||new Set(state.spots).size!==state.spots.length)throw new Error('Invalid story route');
+    if(branch?.kind==='tour'?state.progress!==state.spots.length:state.spots.length!==0)throw new Error('Invalid story route progress');
+  }
   validateJourney(data.journey);
   validateWork(data.work);
   validateLife(data.life,data as unknown as Save);
@@ -191,7 +204,8 @@ function validateJourney(value:unknown): void {
 
 export function upgradeSave(value:unknown): Save {
   const data=structuredClone(object(value));
-  if(data.formatVersion===8){validateSave(data);return data;}
+  if(data.formatVersion===9){validateSave(data);return data;}
+  if(data.formatVersion===8){data.shore={...object(data.shore),regions:emptyRegionalStories()};data.formatVersion=9;return upgradeSave(data);}
   if(data.formatVersion===7){data.shore={...object(data.shore),companion:null};data.autoFishing={...object(data.autoFishing),goal:'relax',sold:0,earnedCoins:0,recentSold:[]};data.formatVersion=8;return upgradeSave(data);}
   if(data.formatVersion===6){data.shore={...object(data.shore),story:'quiet',searched:0,timber:0};data.formatVersion=7;return upgradeSave(data);}
   if(data.formatVersion===5){data.shore=emptyShore();data.formatVersion=6;return upgradeSave(data);}

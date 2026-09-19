@@ -10,7 +10,7 @@ import type { GuestId } from './game/guests.ts';
 import type { DecorId, DecorSlot } from './game/decor.ts';
 import type { AutoCast,AutoFishingView,AutoGoal } from './game/auto-fishing.ts';
 import type { ShoreState, SpotId } from './game/shore.ts';
-export const VERSION = '0.3.0-preview.7';
+export const VERSION = '0.3.0-preview.8';
 export const API = '/api/dsh-fisher/v1';
 export const COAST_ASSET = `${API}/assets/l01-coast-pixel-v1.webp`;
 export type LauncherStatus='shore'|'fishing'|'waiting';
@@ -34,6 +34,7 @@ export type Action =
   | { type: 'cast.begin'; mode: Mode }
   | { type: 'shore.spot'; spot: SpotId }
   | { type: 'shore.read'|'shore.build' }
+  | { type: 'shore.choose'; choice:'near'|'far' }
   | { type: 'shore.donate'; catchId:string; confirmed?:boolean }
   | { type: 'cast.resume'; castId: string }
   | { type: 'cast.cancel'; castId: string; ownerEpoch: number }

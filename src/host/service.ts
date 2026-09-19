@@ -6,6 +6,7 @@ import type { SpeciesId } from '../game/content.ts';
 import { verifyContent } from '../game/content-check.ts';
 import { applyShoreAction } from './shore-actions.ts';
 import { isSpot, recordShoreCatch } from '../game/shore.ts';
+import {recordRegionalCatch} from '../game/regional-stories.ts';
 import { rollEncounter } from '../game/encounters.ts';
 import { gear, isGearId } from '../game/gear.ts';
 import { bait, consumeOverride, finishTide, isBaitId, isInventorySpecies, isTide, levelInfo, regionUnlocked } from '../game/progression.ts';
@@ -483,6 +484,7 @@ export class FisherService {
   }
   private completeCatch(save:Save,cast:PrivateCast): void {
     recordShoreCatch(save.shore,cast.meta);
+    recordRegionalCatch(save.shore.regions,cast.meta,cast.catch);
     const item=cast.catch,def=species(item.speciesId),prior=save.catalog[item.speciesId],journey=save.journey;
     const lengthRecord=!!prior&&item.lengthMm!==null&&item.lengthMm>(prior.bestLengthMm??0);
     item.isNew=!prior;

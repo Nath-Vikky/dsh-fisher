@@ -3,6 +3,7 @@ import type { Catch } from './engine.ts';
 import type { SpeciesId,RegionId } from './content.ts';
 import { SPECIES } from './content.ts';
 import type { ShoreState,SpotId } from './shore.ts';
+import {isStoryRegion,regionalSpot,regionalPause} from './regional-stories.ts';
 
 export const AUTO_GOALS=['relax','catalog','coins','clues'] as const;
 export type AutoGoal=typeof AUTO_GOALS[number];
@@ -10,8 +11,8 @@ export const AUTO_GOAL_NAMES:Record<AutoGoal,string>={relax:'随心钓',catalog:
 export const AUTO_GOAL_DETAILS:Record<AutoGoal,string>={
   relax:'沿用所选落点和鱼饵，所有收获都保留。',
   catalog:'留在当前海岸，提高未发现类别、稀有层与条目的权重。每竿多用25%活动时间，上限20分钟；定向饵和原有保底仍优先。',
-  coins:'摸鱼塘自动选择浅湾。只出售重复、原色、普通鱼；首次发现、纪录、特殊外观和奇珍全部保留。背包满时仍先暂停。',
-  clues:'在摸鱼塘按故事进度选择浅湾或栈桥。发现信件或旧铃后暂停等待你处理；线索不会过期。',
+  coins:'自动选择当前海岸普通鱼较多的浅水落点。只出售重复、原色、普通鱼；首次发现、纪录、特殊外观和奇珍全部保留。背包满时仍先暂停。',
+  clues:'按当前海岸的故事路线选择落点。发现线索或备齐材料后暂停，等你交谈或布置；线索不会过期。',
 };
 export const isAutoGoal=(value:unknown):value is AutoGoal=>AUTO_GOALS.some(goal=>goal===value);
 
@@ -30,13 +31,13 @@ export function autoFishingDuration(item:Catch,goal?:AutoGoal):number {
   return Math.min(1200000,Math.round(base*appearance*((item.quality??0)>=950?1.25:1)*(goal==='catalog'?1.25:1)));
 }
 export function automaticSpot(goal:AutoGoal,region:RegionId,shore:ShoreState,known:readonly SpeciesId[]):SpotId {
-  if(region!=='L01'||goal==='relax')return shore.spots[region];
+  if(goal==='relax')return shore.spots[region];
   if(goal==='coins')return 'cove';
-  if(goal==='clues')return shore.story==='quiet'?'cove':'pier';
+  if(goal==='clues')return isStoryRegion(region)?regionalSpot(region,shore.regions[region]):shore.story==='quiet'?'cove':'pier';
   return SPECIES.some(def=>def.region===region&&def.kind==='fish'&&!known.includes(def.id))?'cove':'pier';
 }
 export function cluePause(region:RegionId,shore:ShoreState):string|null {
-  if(region!=='L01')return '线索在摸鱼塘，切换海岸后再继续。';
+  if(isStoryRegion(region))return regionalPause(region,shore.regions[region]);
   if(shore.story==='bottle')return '瓶中信已收好，等你找贝邮解读后继续。';
   if(shore.story==='recovered')return '旧铃已找回，等你筹备木料修建风铃架。';
   if(shore.story==='built')return '这段故事已经完成，可以换一个托管目标。';

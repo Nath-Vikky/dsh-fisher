@@ -96,7 +96,7 @@ test('legacy upgrade preserves frozen encounter, balances, receipts and original
     assert.equal(await readFile(join(directory,'save.json'),'utf8'),original,'loading alone leaves source save intact');
     await action(service,{type:'cast.resume',castId:'legacy-cast'});
     const caught=await finish(service);assert.equal(caught.speciesId,oldCatch.speciesId);assert.equal(caught.lengthMm,oldCatch.lengthMm);
-    const saved=JSON.parse(await readFile(join(directory,'save.json'),'utf8')).save;validateSave(saved);assert.equal(saved.formatVersion,8);
+    const saved=JSON.parse(await readFile(join(directory,'save.json'),'utf8')).save;validateSave(saved);assert.equal(saved.formatVersion,9);
     const invalid=structuredClone(legacy);(invalid.active as Record<string,unknown>).catch={...oldCatch,speciesId:'G001'};
     assert.throws(()=>upgradeSave(invalid));
   } finally {await service.close();await cleanup(directory);}

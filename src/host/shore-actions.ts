@@ -3,10 +3,19 @@ import type { Action } from '../protocol.ts';
 import { buildingFish } from '../game/shore.ts';
 import { requireDisposable,requireState } from './actions-common.ts';
 import { id } from './validation.ts';
+import {isStoryRegion,REGIONAL_STORIES} from '../game/regional-stories.ts';
 
 export function applyShoreAction(save:Save,action:Action):boolean {
   const shore=save.shore;
   switch(action.type){
+    case 'shore.choose': {
+      const region=save.journey.region;requireState(isStoryRegion(region),'这里的故事不需要选择路线');
+      requireState(!save.active&&!save.pending,'先结束这一竿再选择故事路线');
+      requireState(action.choice==='near'||action.choice==='far','请选择一条有效路线');
+      const state=shore.regions[region];requireState(state.stage==='found'||state.stage==='seeking','先找到线索，完成后不再更换路线');
+      if(state.choice===action.choice)return true;
+      state.choice=action.choice;state.progress=0;state.spots=[];state.stage='seeking';return true;
+    }
     case 'shore.companion':
       requireState(action.companion===null||action.companion==='A002'&&!!save.catalog.A002,'先在图鉴里遇见刀盾狗');
       shore.companion=action.companion;return true;
@@ -23,6 +32,11 @@ export function applyShoreAction(save:Save,action:Action):boolean {
       save.inventory=save.inventory.filter(old=>old.id!==item.id);shore.timber++;return true;
     }
     case 'shore.build':
+      if(isStoryRegion(save.journey.region)){
+        const state=shore.regions[save.journey.region],def=REGIONAL_STORIES[save.journey.region];
+        requireState(state.stage==='ready','还没有备齐故事材料');requireState(save.coins>=def.cost,`还需要${def.cost}壳币`);
+        save.coins-=def.cost;state.stage='built';return true;
+      }
       requireState(save.journey.region==='L01','回到摸鱼塘再修风铃架');
       requireState(shore.story==='recovered'&&shore.timber===2,'还没有备齐风铃和木料');
       requireState(save.coins>=30,'还需要30壳币');

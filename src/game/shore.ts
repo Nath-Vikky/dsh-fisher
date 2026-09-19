@@ -4,24 +4,31 @@ import type { GuestId } from './guests.ts';
 import type { EncounterMeta } from './encounters.ts';
 import type { Catch } from './engine.ts';
 import { species } from './content.ts';
+import {emptyRegionalStories,isStoryRegion,REGIONAL_STORIES} from './regional-stories.ts';
+import type {RegionalStory,StoryRegion} from './regional-stories.ts';
 
 export const SPOT_IDS = ['pier', 'cove'] as const;
 export type SpotId = typeof SPOT_IDS[number];
 export const STORY_STAGES = ['quiet','bottle','charted','recovered','built'] as const;
 export type ShoreStory = typeof STORY_STAGES[number];
-export interface ShoreState { spots: Record<RegionId, SpotId>; story: ShoreStory; searched: number; timber: number; companion:'A002'|null }
-export function emptyShore(): ShoreState { return { spots: { L01:'pier', L02:'pier', L03:'pier', L04:'pier' },story:'quiet',searched:0,timber:0,companion:null }; }
+export interface ShoreState { spots: Record<RegionId, SpotId>; story: ShoreStory; searched: number; timber: number; companion:'A002'|null; regions:Record<StoryRegion,RegionalStory> }
+export function emptyShore(): ShoreState { return { spots: { L01:'pier', L02:'pier', L03:'pier', L04:'pier' },story:'quiet',searched:0,timber:0,companion:null,regions:emptyRegionalStories() }; }
 export function isSpot(value: unknown): value is SpotId { return value === 'pier' || value === 'cove'; }
-export function waterClue(spot: SpotId, tide: Tide): { title: string; detail: string } {
+export function waterClue(spot: SpotId, tide: Tide,region:RegionId='L01'): { title: string; detail: string } {
+  if(region==='L02')return spot==='cove'?{title:'贝沙游鱼',detail:'浅滩普通鱼较多，同稀有层中偏爱海鲜的鱼更容易靠近；适合捡拾海风故事的线索。'}:{title:'珊瑚怪影',detail:'栈桥的奇珍异兽和旧物更常见。怪味饵、奇潮会进一步吸引奇珍异兽。'};
+  if(region==='L03')return spot==='cove'?{title:'莲下萤光',detail:'睡莲间更容易遇到普通鱼，同稀有层中偏爱微光的鱼更多；辉潮仍影响特殊外观。'}:{title:'月影深纹',detail:'木台外侧的奇珍异兽和旧物更多，同稀有层中偏爱深海气味的鱼更容易上钩。'};
+  if(region==='L04')return spot==='cove'?{title:'星砂鱼群',detail:'礁岸普通鱼更多，同稀有层中偏爱微光的鱼更容易靠近；适合慢慢筹备航灯材料。'}:{title:'深处回声',detail:'栈台更容易带回奇珍异兽与旧物，同稀有层中偏爱深海气味的鱼更多。'};
   return spot === 'cove'
     ? { title:'浅水鱼影', detail:'普通鱼更常见，同稀有层中偏爱谷香的鱼更容易靠近。适合攒鱼、找浅湾线索。' }
     : { title:tide === 'odd' ? '异常水纹' : '深水气泡', detail:'奇珍异兽和旧物更容易上钩。奇潮时，奇珍异兽还会更活跃。' };
 }
 export function spotWeights(region: RegionId, spot?: SpotId): readonly number[] | null {
-  return region !== 'L01' || !spot ? null : spot === 'cove' ? [96,3,1] : [80,14,6];
+  const weights={L01:{cove:[96,3,1],pier:[80,14,6]},L02:{cove:[80,16,4],pier:[50,39,11]},L03:{cove:[90,7,3],pier:[67,19,14]},L04:{cove:[87,8,5],pier:[61,23,16]}};
+  return spot?weights[region][spot]:null;
 }
 export function spotPreference(def: Species, spot?: SpotId): number {
-  return def.region === 'L01' && spot === 'cove' && def.tags.includes('grain') ? 2 : 1;
+  const tag=spot==='cove'?({L01:'grain',L02:'marine',L03:'glow',L04:'glow'} as const)[def.region]:spot==='pier'&&(def.region==='L03'||def.region==='L04')?'deep':null;
+  return tag&&def.tags.includes(tag)?2:1;
 }
 export function recordShoreCatch(shore:ShoreState,meta:EncounterMeta):void {
   if(meta.region!=='L01'||meta.source==='invitation')return;
@@ -30,8 +37,10 @@ export function recordShoreCatch(shore:ShoreState,meta:EncounterMeta):void {
   }else if(shore.story==='charted'&&meta.spot==='pier')shore.story='recovered';
 }
 export function shoreVisitor(shore:ShoreState,region:RegionId,visitor:GuestId|null):GuestId|null {
-  return region==='L01'&&shore.story==='bottle'?'G001':visitor;
+  return storyVisitor(shore,region)??visitor;
 }
+export function storyVisitor(shore:ShoreState,region:RegionId):GuestId|null {return region==='L01'?(shore.story==='bottle'?'G001':null):shore.regions[region].stage==='found'?REGIONAL_STORIES[region].guest:null;}
+export function storyNotice(shore:ShoreState,region:RegionId):boolean {return isStoryRegion(region)?['found','ready'].includes(shore.regions[region].stage):shore.story==='bottle'||shore.story==='recovered';}
 export function buildingFish(item:Catch):boolean {
   const def=species(item.speciesId);return def.kind==='fish'&&(def.rarity??9)<=2&&item.variant==='original';
 }
