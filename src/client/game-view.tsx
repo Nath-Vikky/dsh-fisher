@@ -19,6 +19,7 @@ import { createCatalogView } from './catalog-view.tsx';
 import { createDialog } from './dialog.tsx';
 import { CoastSound } from './sound.ts';
 import { createInventoryView } from './inventory-view.tsx';
+import {createStorageView} from './storage-view.tsx';
 import { createAutoFishingView } from './auto-fishing-view.tsx';
 import { createCoastIcon } from './coast-icons.tsx';
 import { createCoastBadge } from './coast-badge.tsx';
@@ -69,6 +70,7 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
   const FacilityView=createFacilityView(React,FishArt);
   const Catalog = createCatalogView(React,FishArt);
   const Inventory = createInventoryView(React,FishArt);
+  const Storage=createStorageView(React);
 
   return function Game({ lowPerformance,reducedMotion=false,sound=false,volume=.35,obscured=false,onEnabledChange }: GameProps) {
     const [controller] = React.useState(() => new GameController(onEnabledChange));
@@ -88,7 +90,7 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
     const [talk,setTalk]=React.useState(false),[shoreTalk,setShoreTalk]=React.useState(false);
     const [companionPlay,setCompanionPlay]=React.useState(0);
     const [facility,setFacility]=React.useState<FacilityId|null>(null),[displayArea,setDisplayArea]=React.useState<'aquarium'|'shelf'|'decor'|null>(null);
-    const [panel,setPanel]=React.useState<'automatic'|'status'|'fishing'|'shore'|'adventure'|null>(null);
+    const [panel,setPanel]=React.useState<'automatic'|'status'|'storage'|'fishing'|'shore'|'adventure'|null>(null);
     const [adventureArea,setAdventureArea]=React.useState<AdventureArea>('legend'),[picnicTalk,setPicnicTalk]=React.useState(false);
     const root = React.useRef<HTMLDivElement>(null);
     React.useEffect(() => {
@@ -208,7 +210,7 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
         <button aria-haspopup="dialog" onClick={()=>changeTab('life')}><Icon name="note"/><span>手记</span></button>
         <button aria-haspopup="dialog" aria-label="自动钓鱼设置" data-active={data?.autoFishing.enabled} onClick={()=>openPanel('automatic')}><Icon name="auto"/><span>{data?.autoFishing.enabled?'托管中':'托管'}</span></button>
       </nav>
-      <button className="dsh-fisher-hud-save" data-error={!!view.error||!view.connected} aria-haspopup="dialog" onClick={()=>openPanel('status')} title={view.error??(view.busy?'正在保存…':'进度已保存在本机')}><Icon name="save"/><span>{view.error?'保存提示':!view.connected?'正在连接':view.busy?'保存中':'存档'}</span></button>
+      <button className="dsh-fisher-hud-save" data-error={!!view.error||!view.connected} aria-haspopup="dialog" onClick={()=>openPanel(view.error||!view.connected?'status':'storage')} title={view.error??(view.busy?'正在保存…':'管理本机存档')}><Icon name="save"/><span>{view.error?'保存提示':!view.connected?'正在连接':view.busy?'保存中':'存档'}</span></button>
       {!overlay&&data&&<div className="dsh-fisher-hud-fishing" aria-label="岸边钓鱼操作">
         {cast?.companionHint&&<small className="dsh-fisher-companion-hint" role="status">{cast.companionHint}</small>}
         {automatic||!cast&&data.autoFishing.enabled?<button onClick={()=>openPanel('automatic')} className="dsh-fisher-primary"><Icon name="auto"/><span>{data.autoFishing.working?'正在自动钓鱼':'托管等待中'}</span></button>:cast?<>
@@ -221,6 +223,7 @@ export function createGameView(React: typeof ReactTypes): ReactTypes.ComponentTy
       {prepareFishing&&!cast&&!data?.autoFishing.enabled&&<Dialog title="这一竿的准备" onClose={()=>setPrepareFishing(false)} busy={view.busy} closeLabel="回到岸边">{fishingPanel}</Dialog>}
       {talk&&visitor&&data&&<Conversation key={visitor.id} definition={visitor} outfit={data.life.guests[visitor.id].outfit} opening={visitorLine!} onClose={()=>setTalk(false)} onJournal={()=>{setTalk(false);changeTab('life');}}/>}
       {panel==='fishing'&&<Dialog title="钓鱼操作" onClose={()=>setPanel(null)} closeLabel="回到岸边">{fishingPanel}</Dialog>}
+      {panel==='storage'&&data&&<Dialog title="本机存档" onClose={()=>setPanel(null)} closeLabel="回到岸边" busy={view.busy} error={view.error} onRetry={()=>void controller.retry()}><Storage data={data} controller={controller} busy={view.busy||view.retryPending}/></Dialog>}
       {panel==='automatic'&&data&&<Dialog title="海岸托管" className="dsh-fisher-auto-dialog" onClose={()=>setPanel(null)} closeLabel="回到岸边" busy={view.busy} error={view.error} onRetry={()=>void controller.retry()}><Automatic.Controls data={data} controller={controller} disabled={blocked} onHistory={()=>setAutoHistory(true)}/><ShoreSpots automatic compact data={data} controller={controller} disabled={blocked}/><Automatic.Progress data={data} controller={controller} disabled={blocked} onCancel={()=>setCancelConfirm(true)} onHarbor={()=>{setPanel(null);changeTab('harbor');}}/></Dialog>}
       {panel==='shore'&&data&&<Dialog title="岸边故事" onClose={()=>setPanel(null)} busy={view.busy}><ShoreJournal data={data} controller={controller} disabled={blocked} onRead={()=>setShoreTalk(true)} onFish={()=>setPanel(null)} onPlay={()=>{setCompanionPlay(value=>value+1);setPanel(null);}} onAdventures={()=>openAdventure('legend')}/></Dialog>}
       {panel==='adventure'&&data&&<Dialog title="岸边生活" onClose={()=>setPanel(null)} busy={view.busy}><AdventureJournal key={adventureArea} initialArea={adventureArea} data={data} controller={controller} disabled={blocked} onPicnic={()=>setPicnicTalk(true)} onHarbor={()=>{setPanel(null);changeTab('harbor');}}/></Dialog>}

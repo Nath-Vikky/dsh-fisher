@@ -1,6 +1,7 @@
 import { autoFishingStyles } from './auto-fishing-styles.ts';
 import { activitySwitchStyles } from './activity-switch-styles.ts';
 import { workSupplyStyles } from './work-supply-styles.ts';
+import { uiRefinementStyles } from './ui-refinement-styles.ts';
 export const paperUiStyles = `
 .dsh-fisher,.dsh-fisher-settings{--fisher-paper:#e9e3c5;--fisher-raised:#f8f0d7;--fisher-ink:#504356;--fisher-muted:#756b70;--fisher-sea:#bed0b4;--fisher-coral:#edc0b0;--fisher-edge:#b2a080;--fisher-light:#fff9e3;--fisher-shade:#50435655;--fisher-slot:#f3ead1;--fisher-gold:#e4c88b;--fisher-pink:#b95779}
 .dsh-fisher[data-theme=dark],.dsh-fisher-settings[data-theme=dark]{--fisher-paper:#373347;--fisher-raised:#474057;--fisher-ink:#f0e7cd;--fisher-muted:#c2b8be;--fisher-sea:#576b64;--fisher-coral:#845968;--fisher-edge:#a18c97;--fisher-light:#71637d;--fisher-shade:#211a2e99;--fisher-slot:#4b4259;--fisher-gold:#806f4e;--fisher-pink:#f0a3b8}
@@ -111,4 +112,5 @@ ${activitySwitchStyles}
 .dsh-fisher-picnic-choices{display:grid;grid-template-columns:1fr 1fr;gap:8px}.dsh-fisher-adventures label{display:grid;gap:5px;font-size:12px}.dsh-fisher-adventures select{width:100%;min-width:0}.dsh-fisher-adventures small{line-height:1.65}.dsh-fisher-adventures .dsh-fisher-shore-tabs button{padding:8px 3px;font-size:12px}
 ${autoFishingStyles}
 ${workSupplyStyles}
+${uiRefinementStyles}
 `;

@@ -1,6 +1,6 @@
 import type * as ReactTypes from 'react';
 import type { Bootstrap } from '../protocol.ts';
-import { SPECIES, VARIANT_NAMES, region, species } from '../game/content.ts';
+import { SPECIES, VARIANT_NAMES, region, species, spriteName } from '../game/content.ts';
 import type { SpeciesId, Variant } from '../game/content.ts';
 import type { Catch } from '../game/engine.ts';
 import { QUESTS, questDefinition } from '../game/quests.ts';
@@ -10,6 +10,7 @@ import { ACHIEVEMENTS, achievementProgress } from '../game/achievements.ts';
 import { GUESTS, guestEligible, guestGoal } from '../game/guests.ts';
 import type { GuestDefinition } from '../game/guests.ts';
 import { DECOR, DECOR_SLOTS, THEMES, SLOT_NAMES, THEME_NAMES, isDecorId } from '../game/decor.ts';
+import type {DecorSlot} from '../game/decor.ts';
 import { FRAME_IDS, FRAME_NAMES, frameAvailable } from '../game/life.ts';
 import type { GameController } from './controller.ts';
 import { API } from '../protocol.ts';
@@ -20,6 +21,7 @@ import { createDialog } from './dialog.tsx';
 import { createHelp,createPager } from './compact-ui.tsx';
 import { createConversation } from './conversation.tsx';
 import {createPreparedPortrait,retainConversationArt} from './portrait-art.tsx';
+import {createItemPicker} from './item-picker.tsx';
 
 interface Props { data:Bootstrap; controller:GameController; blocked:boolean; onFish:()=>void; reducedMotion?:boolean; lowPerformance?:boolean; displayOnly?:boolean; initialDisplay?:'aquarium'|'shelf'|'decor'|'shop' }
 type Art = ReactTypes.ComponentType<{id:SpeciesId;variant?:Variant|null;large?:boolean}>;
@@ -29,10 +31,12 @@ const protectedCatch=(item:Catch)=>item.isNew||item.isNewVariant||item.isRecord;
 
 export function createLifeView(React:typeof ReactTypes,FishArt:Art) {
   const Showcase=createShowcase(React),Dialog=createDialog(React),Help=createHelp(React),Pager=createPager(React),Conversation=createConversation(React),Portrait=createPreparedPortrait(React);
+  const ItemPicker=createItemPicker(React);
   function QuestCard({quest,data,controller,blocked}:{quest:Quest}&Omit<Props,'onFish'>) {
     const [skipping,setSkipping]=React.useState(false);
     const [selected,setSelected]=React.useState<string[]>([]);
     const [confirmed,setConfirmed]=React.useState(false);
+    const [page,setPage]=React.useState(0);
     const status=goalProgress(quest,data),definition=questDefinition(quest.template);
     const target=quest.goal.kind==='deliver'?quest.goal.species:null;
     const choices=data.inventory.filter(item=>item.speciesId===target);
@@ -45,10 +49,12 @@ export function createLifeView(React:typeof ReactTypes,FishArt:Art) {
       {quest.status==='active'&&<><p className="dsh-fisher-goal-progress">进度 {status.current}/{status.total}</p>
         {target&&<fieldset className="dsh-fisher-delivery"><legend>选定交付个体 · {chosen.length}/3</legend>
           {!choices.length&&<p>背包里还没有{species(target).name}。</p>}
-          {choices.map(item=>{const unavailable=item.locked||displayed(data,item.id),checked=chosen.some(value=>value.id===item.id);return <label key={item.id} className="dsh-fisher-check-row">
+          {choices.slice(page*3,page*3+3).map(item=>{const unavailable=item.locked||displayed(data,item.id),checked=chosen.some(value=>value.id===item.id);return <label key={item.id} className="dsh-fisher-check-row">
             <input type="checkbox" disabled={blocked||unavailable||(!checked&&chosen.length===3)} checked={checked} onChange={event=>{setSelected(event.target.checked?[...chosen.map(item=>item.id),item.id]:selected.filter(id=>id!==item.id));setConfirmed(false);}}/>
             <span>{catchLabel(item)}<small>{item.locked?'已锁定':displayed(data,item.id)?'展示中，请先取回':protectedCatch(item)?'新发现、外观或纪录个体':'可交付'}</small></span>
           </label>;})}
+          <Pager page={page} count={Math.ceil(choices.length/3)} onChange={setPage}/>
+          {!!chosen.length&&<small>已选：{chosen.map(catchLabel).join('；')}</small>}
           {needsConfirmation&&<label className="dsh-fisher-check-row"><input type="checkbox" checked={confirmed} disabled={blocked} onChange={event=>setConfirmed(event.target.checked)}/><span>我确认交付选中的受保护个体，图鉴仍保留。</span></label>}
           <p>交付后会从背包移出所选的三条鱼。</p>
         </fieldset>}
@@ -88,29 +94,53 @@ export function createLifeView(React:typeof ReactTypes,FishArt:Art) {
       {state.stage>0&&<small>重访无需鱼饵，不重复领取首次相遇的奖励。</small>}
       </>}
       {pane==='story'&&state.stage>=2&&<><nav className="dsh-fisher-subtabs" aria-label="故事页码"><button aria-pressed={story===0} onClick={()=>setStory(0)}>第一页</button><button disabled={state.stage<3} aria-pressed={story===1} onClick={()=>setStory(1)}>第二页</button></nav><p className="dsh-fisher-story">{definition.stories[story]}</p></>}
-      {pane==='outfit'&&state.stage>0&&<><div className="dsh-fisher-portrait"><button aria-haspopup="dialog" onClick={onPortraitOpen}>查看来客立绘</button></div><label className="dsh-fisher-select-row">来客衣装<select aria-label={`${definition.name}的衣装`} value={state.outfit} disabled={blocked} onChange={event=>void controller.action({type:'guest.outfit',guest:definition.id,outfit:event.target.value==='alternate'?'alternate':'base'})}><option value="base">初见衣装</option><option value="alternate" disabled={state.stage<3}>{definition.alternate}{state.stage<3?' · 常客时解锁':''}</option></select></label></>}
+      {pane==='outfit'&&state.stage>0&&<><div className="dsh-fisher-outfit-options">{(['base','alternate'] as const).map(outfit=><button key={outfit} aria-pressed={state.outfit===outfit} disabled={blocked||outfit==='alternate'&&state.stage<3} onClick={()=>void controller.action({type:'guest.outfit',guest:definition.id,outfit})}><img src={`${API}/assets/${thumbnailAsset(guestPicture(definition.id,outfit,'chibi')!)}`} alt="" loading="lazy" decoding="async"/><strong>{outfit==='base'?'初见衣装':definition.alternate}</strong><small>{state.outfit===outfit?'✓ 正在穿着':outfit==='alternate'&&state.stage<3?'常客时解锁':'换上这套'}</small></button>)}</div><button aria-haspopup="dialog" onClick={onPortraitOpen}>查看当前衣装立绘</button></>}
       {portraitOpen&&<Dialog title={`${definition.name} · ${state.outfit==='base'?'初见衣装':definition.alternate}`} onClose={onPortraitOpen}><div className="dsh-fisher-portrait"><Portrait file={guestPicture(definition.id,state.outfit,'portrait')!} alt={`${definition.name}的立绘`}/></div></Dialog>}
       {chat&&<Conversation definition={definition} outfit={state.outfit} onClose={()=>setChat(false)}/>}
     </article>;
   }
   function Display({data,controller,blocked,reducedMotion=false,lowPerformance=false,initialDisplay}:Omit<Props,'onFish'>) {
     const [area,setArea]=React.useState<'aquarium'|'shelf'|'decor'|'shop'|null>(initialDisplay??null),[page,setPage]=React.useState(0),[theme,setTheme]=React.useState<(typeof THEMES)[number]>(THEMES[0]!);
+    type Placement={kind:'aquarium'|'shelf';slot:number}|{kind:'decor';slot:DecorSlot};
+    const [placement,setPlacement]=React.useState<Placement|null>(null);
     const creatures=data.inventory.filter(item=>species(item.speciesId).creature),objects=data.inventory.filter(item=>!species(item.speciesId).creature);
     const relics=SPECIES.filter(item=>item.kind==='relic'&&data.catalog[item.id]);
     const names={aquarium:'布置鱼缸',shelf:'整理陈列架',decor:'码头与卡片',shop:'装饰小铺'};
+    const pickerItems=placement?.kind==='decor'?DECOR.filter(item=>item.slot===placement.slot&&data.life.ownedDecor.includes(item.id)).map(item=>({id:item.id,name:item.name,detail:THEME_NAMES[item.theme],image:DECOR_ART[item.id]})):
+      (placement?.kind==='aquarium'?creatures:objects).map(item=>({id:`catch:${item.id}`,name:species(item.speciesId).name,detail:[item.lengthMm===null?'海岸纪念':`${(item.lengthMm/10).toFixed(1)} cm`,item.variant?VARIANT_NAMES[item.variant]:null,`#${item.id.slice(-5)}`].filter(Boolean).join(' · '),image:spriteName(item.speciesId,item.variant),badge:displayed(data,item.id)?'展示中 · 可移到这里':item.locked?'已锁定 · 可展示':undefined})).concat(placement?.kind==='shelf'?relics.map(item=>({id:`relic:${item.id}`,name:item.name,detail:'图鉴遗物 · 不占背包',image:spriteName(item.id,null),badge:undefined})):[]);
+    const currentEntry=placement?.kind==='shelf'?data.life.shelf[placement.slot]:null;
+    const selectedPlacement=placement?.kind==='decor'?data.life.decor[placement.slot]:placement?.kind==='aquarium'?(data.life.aquarium[placement.slot]?`catch:${data.life.aquarium[placement.slot]}`:null):currentEntry?`${currentEntry.kind}:${currentEntry.id}`:null;
+    const choosePlacement=async(value:string|null)=>{
+      if(!placement)return;
+      if(placement.kind==='decor'){
+        if(value&&!isDecorId(value))return;
+        await controller.action({type:'decor.equip',slot:placement.slot,decor:isDecorId(value)?value:null});
+      }else if(placement.kind==='aquarium'){
+        const item=creatures.find(item=>`catch:${item.id}`===value);if(value&&!item)return;
+        await controller.action({type:'display.aquarium',slot:placement.slot,catchId:item?.id??null});
+      }else{
+        const item=objects.find(item=>`catch:${item.id}`===value),relic=relics.find(item=>`relic:${item.id}`===value);if(value&&!item&&!relic)return;
+        await controller.action({type:'display.shelf',slot:placement.slot,item:item?{kind:'catch',id:item.id}:relic?{kind:'relic',id:relic.id}:null});
+      }
+      if(!controller.getSnapshot().error)setPlacement(null);
+    };
     return <>
       <div className="dsh-fisher-card-heading">{area?<button onClick={()=>{setArea(null);setPage(0);}}>‹ 返回展示</button>:<h3>喜欢的相遇，就留在眼前</h3>}<Help label="展示说明"><p>展示中的个体仍占背包格，取回后才可出售、放流或交付。遗物可以直接放上陈列架。同主题集齐六件装饰，解锁对应收获卡样式。</p></Help></div>
       {!area&&<><Showcase data={data} reducedMotion={reducedMotion} lowPerformance={lowPerformance}/><div className="dsh-fisher-menu-grid">{(Object.keys(names) as (keyof typeof names)[]).map(id=><button key={id} onClick={()=>{setArea(id);setPage(0);}}>{names[id]}</button>)}</div></>}
-      {area==='aquarium'&&<><h3>鱼缸 · {data.life.aquarium.filter(Boolean).length}/8</h3><div className="dsh-fisher-display-grid">{data.life.aquarium.slice(page*4,page*4+4).map((id,index)=>{const slot=page*4+index,item=creatures.find(item=>item.id===id);return <div key={slot} className="dsh-fisher-display-slot">
-        {item?<FishArt id={item.speciesId} variant={item.variant}/>:<div className="dsh-fisher-vacant" aria-hidden="true">≈</div>}
-        <label>第 {slot+1} 格<select aria-label={`鱼缸第 ${slot+1} 格`} value={id??''} disabled={blocked} onChange={event=>void controller.action({type:'display.aquarium',slot,catchId:event.target.value||null})}><option value="">留一片水</option>{creatures.map(item=><option value={item.id} key={item.id}>{catchLabel(item)}{data.life.aquarium.includes(item.id)?' · 已在鱼缸':''}</option>)}</select></label>
-      </div>;})}</div><Pager page={page} count={2} onChange={setPage}/></>}
-      {area==='shelf'&&<><h3>陈列架 · {data.life.shelf.filter(Boolean).length}/6</h3><div className="dsh-fisher-display-grid">{data.life.shelf.slice(page*4,page*4+4).map((entry,index)=>{const slot=page*4+index,caught=entry?.kind==='catch'?objects.find(item=>item.id===entry.id):null,def=entry?.kind==='relic'?species(entry.id):caught?species(caught.speciesId):null;return <div key={slot} className="dsh-fisher-display-slot">
-        {def?<FishArt id={def.id}/>:<div className="dsh-fisher-vacant" aria-hidden="true">·</div>}
-        <label>第 {slot+1} 层<select aria-label={`陈列架第 ${slot+1} 层`} value={entry?`${entry.kind}:${entry.id}`:''} disabled={blocked} onChange={event=>{const value=event.target.value,item=objects.find(item=>`catch:${item.id}`===value),relic=relics.find(item=>`relic:${item.id}`===value);if(!value||item||relic)void controller.action({type:'display.shelf',slot,item:item?{kind:'catch',id:item.id}:relic?{kind:'relic',id:relic.id}:null});}}><option value="">空一层</option>{objects.map(item=><option key={item.id} value={`catch:${item.id}`}>{catchLabel(item)}</option>)}{relics.map(item=><option key={item.id} value={`relic:${item.id}`}>{item.name} · 遗物</option>)}</select></label>
-      </div>;})}</div><Pager page={page} count={2} onChange={setPage}/></>}
-      {area==='decor'&&<>{DECOR_SLOTS.map(slot=><label className="dsh-fisher-select-row" key={slot}>{SLOT_NAMES[slot]}<select aria-label={`布置${SLOT_NAMES[slot]}`} value={data.life.decor[slot]??''} disabled={blocked} onChange={event=>{const value=event.target.value;if(!value||isDecorId(value))void controller.action({type:'decor.equip',slot,decor:isDecorId(value)?value:null});}}><option value="">海岸原样</option>{DECOR.filter(item=>item.slot===slot&&data.life.ownedDecor.includes(item.id)).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>)}<label className="dsh-fisher-select-row">收获卡样式<select aria-label="收获卡样式" value={data.life.frame} disabled={blocked} onChange={event=>{const frame=FRAME_IDS.find(id=>id===event.target.value);if(frame)void controller.action({type:'frame.select',frame});}}>{FRAME_IDS.map(id=><option key={id} value={id} disabled={!frameAvailable(data.life,id)}>{FRAME_NAMES[id]}{frameAvailable(data.life,id)?'':' · 未解锁'}</option>)}</select></label></>}
+      {area==='aquarium'&&<><h3>鱼缸 · {data.life.aquarium.filter(Boolean).length}/8</h3><small>点击格位，放入、替换或取回收藏。</small><div className="dsh-fisher-display-grid">{data.life.aquarium.slice(page*4,page*4+4).map((id,index)=>{const slot=page*4+index,item=creatures.find(item=>item.id===id);return <button key={slot} className="dsh-fisher-display-slot" aria-label={`布置鱼缸第 ${slot+1} 格`} aria-haspopup="dialog" disabled={blocked} onClick={()=>setPlacement({kind:'aquarium',slot})}>
+        {item?<img src={`${API}/assets/${thumbnailAsset(spriteName(item.speciesId,item.variant)!)}`} alt="" decoding="async"/>:<span className="dsh-fisher-vacant" aria-hidden="true">≈</span>}
+        <strong>{item?species(item.speciesId).name:'留一片水'}</strong><small>第 {slot+1} 格{item?.variant?` · ${VARIANT_NAMES[item.variant]}`:' · 点击布置'}</small>
+      </button>;})}</div><Pager page={page} count={2} onChange={setPage}/></>}
+      {area==='shelf'&&<><h3>陈列架 · {data.life.shelf.filter(Boolean).length}/6</h3><small>点击格位，摆放奇物或已发现的遗物。</small><div className="dsh-fisher-display-grid">{data.life.shelf.slice(page*4,page*4+4).map((entry,index)=>{const slot=page*4+index,caught=entry?.kind==='catch'?objects.find(item=>item.id===entry.id):null,def=entry?.kind==='relic'?species(entry.id):caught?species(caught.speciesId):null;return <button key={slot} className="dsh-fisher-display-slot" aria-label={`布置陈列架第 ${slot+1} 层`} aria-haspopup="dialog" disabled={blocked} onClick={()=>setPlacement({kind:'shelf',slot})}>
+        {def?<img src={`${API}/assets/${thumbnailAsset(spriteName(def.id,null)!)}`} alt="" decoding="async"/>:<span className="dsh-fisher-vacant" aria-hidden="true">◇</span>}
+        <strong>{def?.name??'空一层'}</strong><small>第 {slot+1} 层 · 点击布置</small>
+      </button>;})}</div><Pager page={page} count={2} onChange={setPage}/></>}
+      {area==='decor'&&<><div className="dsh-fisher-decor-grid">{DECOR_SLOTS.map(slot=>{const item=DECOR.find(item=>item.id===data.life.decor[slot]);return <button key={slot} aria-label={`布置${SLOT_NAMES[slot]}`} aria-haspopup="dialog" disabled={blocked} onClick={()=>setPlacement({kind:'decor',slot})}>{item&&<img src={`${API}/assets/${thumbnailAsset(DECOR_ART[item.id]!)}`} alt="" loading="lazy" decoding="async"/>}<span><strong>{SLOT_NAMES[slot]}</strong><small>{item?.name??'海岸原样'}</small></span></button>;})}</div><label className="dsh-fisher-select-row">收获卡样式<select aria-label="收获卡样式" value={data.life.frame} disabled={blocked} onChange={event=>{const frame=FRAME_IDS.find(id=>id===event.target.value);if(frame)void controller.action({type:'frame.select',frame});}}>{FRAME_IDS.map(id=><option key={id} value={id} disabled={!frameAvailable(data.life,id)}>{FRAME_NAMES[id]}{frameAvailable(data.life,id)?'':' · 未解锁'}</option>)}</select></label></>}
       {area==='shop'&&<><nav className="dsh-fisher-subtabs" aria-label="装饰主题">{THEMES.map(id=><button key={id} aria-pressed={theme===id} onClick={()=>{setTheme(id);setPage(0);}}>{THEME_NAMES[id]}</button>)}</nav>{DECOR.filter(item=>item.theme===theme).slice(page*3,page*3+3).map(item=>{const owned=data.life.ownedDecor.includes(item.id);return <div className="dsh-fisher-shop-row" key={item.id}><img className="dsh-fisher-gear-art" src={`${API}/assets/${thumbnailAsset(DECOR_ART[item.id]!)}`} alt=""/><div><b>{item.name}</b><small>{SLOT_NAMES[item.slot]} · {item.price} 壳币</small></div><button aria-label={`${owned?'已拥有':'购买'}${item.name}`} disabled={blocked||owned||data.coins<item.price} onClick={()=>void controller.action({type:'decor.buy',decor:item.id})}>{owned?'已拥有':'购买'}</button></div>})}<Pager page={page} count={2} onChange={setPage}/></>}
+      {placement&&<Dialog title={placement.kind==='decor'?`布置${SLOT_NAMES[placement.slot]}`:`${placement.kind==='aquarium'?'鱼缸':'陈列架'} · 第 ${placement.slot+1} 格`} onClose={()=>setPlacement(null)} closeLabel="取消选择" busy={blocked} error={controller.getSnapshot().error} onRetry={()=>void controller.retry()}>
+        <ItemPicker items={pickerItems} selected={selectedPlacement??null} disabled={blocked} onSelect={value=>void choosePlacement(value)} label={placement.kind==='decor'?'搜索已拥有的装饰':'搜索名字、外观或编号'} empty={placement.kind==='decor'?'还没有这种装饰，可以去装饰小铺看看。':'背包里还没有可放在这里的收藏。'}/>
+        <button className="dsh-fisher-clear-placement" disabled={blocked||!selectedPlacement} onClick={()=>void choosePlacement(null)}>{placement.kind==='decor'?'恢复海岸原样':'取回当前展示'}</button>
+      </Dialog>}
     </>;
   }
   return function LifeView(props:Props) {

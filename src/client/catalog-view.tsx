@@ -18,6 +18,8 @@ export function createCatalogView(React:typeof ReactTypes,FishArt:Art) {
     const [kind,setKind]=React.useState('all'),[discovery,setDiscovery]=React.useState('all'),[rarity,setRarity]=React.useState('all');
     const [selected,setSelected]=React.useState<SpeciesId|null>(null),[variant,setVariant]=React.useState<Variant>('original');
     const [page,setPage]=React.useState(0),[filters,setFilters]=React.useState(false);
+    const filtered=!!search||[kind,discovery,rarity].some(value=>value!=='all');
+    const clear=()=>{setSearch('');setKind('all');setDiscovery('all');setRarity('all');setPage(0);};
     const {ref,pageSize}=useSlotLayout();
     React.useEffect(()=>{setPage(0);},[location,search,kind,discovery,rarity]);
     const idle=!data.active&&!data.pending;
@@ -40,8 +42,10 @@ export function createCatalogView(React:typeof ReactTypes,FishArt:Art) {
       <div className="dsh-fisher-catalog-filters"><label>类别<select value={kind} onChange={event=>setKind(event.target.value)}><option value="all">全部收藏</option><option value="fish">正常鱼</option><option value="abstract">奇珍异兽</option><option value="relic">海岸遗物</option><option value="guest">海岸来客</option></select></label>
         <label>发现<select value={discovery} onChange={event=>setDiscovery(event.target.value)}><option value="all">全部</option><option value="known">已发现</option><option value="unknown">未发现</option></select></label>
         <label>稀有度<select value={rarity} onChange={event=>setRarity(event.target.value)}><option value="all">全部</option>{['常见','少见','稀有','珍奇'].map((name,index)=><option key={name} value={index+1}>{name}</option>)}</select></label></div>
+        <button disabled={!filtered} onClick={clear}>清空搜索与筛选</button>
       </Dialog>}
-      {!entries.length&&<p>这一页暂时没有符合筛选的相遇。</p>}
+      {filtered&&<div className="dsh-fisher-filter-status"><small>筛选到 {entries.length} 项相遇</small><button onClick={clear}>清空条件</button></div>}
+      {!entries.length&&<p className="dsh-fisher-empty-note">没有符合条件的相遇，试试其他分类或清空筛选。</p>}
       <div className="dsh-fisher-catalog-grid dsh-fisher-slot-grid">{entries.slice(currentPage*pageSize,currentPage*pageSize+pageSize).map(entry=>{
         const record=data.catalog[entry.id],clue=data.journey.completed[entry.region]>=10&&entry.kind!=='guest';
         const available=VARIANTS.filter(id=>record?.variants[id]),chosen=available.includes(variant)?variant:available[0]??'original';

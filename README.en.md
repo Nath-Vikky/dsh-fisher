@@ -4,7 +4,9 @@
 
 A relaxing fishing and collection plugin for DeepSeek Harness (DSH) Web. Head to the shore and cast a line, or enable automatic fishing and let your character wait for a catch while you use DSH.
 
-**Current main branch: `main` · `0.3.0-preview.12`**. Explore four walkable 3D shores with detailed 2D characters and a pixel-art paper interface. You can build and install the plugin locally from source; it has not been published to npm.
+**Current main branch: `main` · `0.3.0-preview.13`**. Explore four walkable 3D shores with detailed 2D characters and a pixel-art paper interface. You can build and install the plugin locally from source; it has not been published to npm.
+
+Search and sort your inventory, browse illustrated pages to arrange collections and decorations, and preview visitor outfits. Picnic preparation has three steps: invitation, ingredient, and confirmation. The bottom-left “存档” (Save) button opens local backup management; settings are grouped into window, appearance, and sound/performance.
 
 The original pixel-art version, `0.1.0-rc.11`, is preserved in full on [archive/pixel-v1-rc11](https://github.com/Nath-Vikky/dsh-fisher/tree/archive/pixel-v1-rc11).
 

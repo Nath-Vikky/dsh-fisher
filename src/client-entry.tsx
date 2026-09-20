@@ -147,28 +147,37 @@ function createComponents(store: WindowStore,plugin:PluginStore) {
   function Settings() {
     const view = useWindow();
     const preference=usePlugin();
+    const [section,setSection]=React.useState<'window'|'appearance'|'playback'>('window');
+    const toggle=(label:string,description:string,checked:boolean,onChange:()=>void)=><div className="dsh-fisher-preference-row"><span><strong>{label}</strong><small>{description}</small></span><button type="button" className="dsh-fisher-switch" role="switch" aria-label={label} aria-checked={checked} onClick={onChange}><span/></button></div>;
     return <section className="dsh-fisher-settings" aria-label="摸鱼海岸设置" data-theme={view.theme} data-reduced-motion={view.reducedMotion} style={appearance(view)}>
-      <h3>摸鱼海岸</h3><p>工作间隙，来海边坐一会儿。</p>
       <div className="dsh-fisher-plugin-setting"><div><strong>启用摸鱼海岸</strong><small>{preference.busy?'正在保存…':preference.enabled?'已启用':'已停用'} · 停用会暂停游戏与补给，保留存档。</small></div><button type="button" className="dsh-fisher-switch" role="switch" aria-label="启用摸鱼海岸插件" aria-checked={preference.enabled} disabled={!preference.ready||!preference.writable||preference.busy} onClick={()=>void plugin.setEnabled(!preference.enabled)}><span/></button></div>
       {preference.error&&<p role="alert">{preference.error} <button onClick={()=>void plugin.refresh()}>重试连接</button></p>}
       <button disabled={!preference.ready||!preference.enabled} onClick={() => store.set({ open: !view.open })}>{view.open ? '收起海岸' : '打开海岸'}</button>
-      <div className="dsh-fisher-setting-row"><span>窗口尺寸</span>
+      <nav className="dsh-fisher-settings-tabs" aria-label="设置分类">{([['window','窗口'],['appearance','外观'],['playback','声音与性能']] as const).map(([id,label])=><button key={id} aria-pressed={section===id} onClick={()=>setSection(id)}>{label}</button>)}</nav>
+      <div className="dsh-fisher-settings-page">
+      {section==='window'&&<><div className="dsh-fisher-setting-row"><span>窗口尺寸</span>
         <button onClick={() => store.preset('compact')}>紧凑</button><button onClick={() => store.preset('standard')}>标准</button>
         <button onClick={() => store.preset('roomy')}>宽松</button></div>
-      <div className="dsh-fisher-setting-row"><label><input type="checkbox" checked={view.aspectLocked} onChange={event=>store.set({aspectLocked:event.target.checked,aspectRatio:view.width/view.height},true)}/>锁定当前宽高比例</label></div>
-      <div className="dsh-fisher-setting-row">
+      {toggle('锁定当前宽高比例','拖动右下角时保持比例',view.aspectLocked,()=>store.set({aspectLocked:!view.aspectLocked,aspectRatio:view.width/view.height},true))}
+      <div className="dsh-fisher-setting-row dsh-fisher-dimensions">
         <label>宽度 <input type="number" key={Math.round(view.width)} min={Math.min(320,window.innerWidth-16)} max={Math.max(1,window.innerWidth-16)} step={10} defaultValue={Math.round(view.width)}
           onKeyDown={event=>{if(event.key==='Enter')event.currentTarget.blur();}} onBlur={event=>{const width=event.target.valueAsNumber;if(Number.isFinite(width))store.resizeTo(width,view.height,true);else event.target.value=String(Math.round(view.width));}}/></label>
         <label>高度 <input type="number" key={Math.round(view.height)} min={Math.min(360,window.innerHeight-16)} max={Math.max(1,window.innerHeight-16)} step={10} defaultValue={Math.round(view.height)}
           onKeyDown={event=>{if(event.key==='Enter')event.currentTarget.blur();}} onBlur={event=>{const height=event.target.valueAsNumber;if(Number.isFinite(height))store.resizeTo(view.width,height,true);else event.target.value=String(Math.round(view.height));}}/></label>
       </div>
-      <div className="dsh-fisher-setting-row"><label>主题<select value={view.theme} onChange={event=>store.set({theme:event.target.value==='dark'?'dark':event.target.value==='light'?'light':'system'},true)}><option value="system">跟随系统</option><option value="light">暖纸浅色</option><option value="dark">夜航深色</option></select></label>
-        <label>字号<select value={view.fontSize} onChange={event=>store.set({fontSize:Number(event.target.value)===18?18:Number(event.target.value)===16?16:14},true)}><option value={14}>14 px</option><option value={16}>16 px</option><option value={18}>18 px</option></select></label></div>
-      <div className="dsh-fisher-setting-row"><label><input type="checkbox" checked={view.reducedMotion} onChange={event=>store.set({reducedMotion:event.target.checked},true)}/>减少动态效果</label></div>
-      <div className="dsh-fisher-setting-row"><label><input type="checkbox" checked={view.sound} onChange={event=>store.set({sound:event.target.checked},true)}/>播放轻声提示</label><label>音量<input type="range" min={0} max={100} step={5} value={Math.round(view.volume*100)} onChange={event=>store.set({volume:Number(event.target.value)/100},true)}/>{Math.round(view.volume*100)}%</label></div>
-      <div className="dsh-fisher-setting-row"><label><input type="checkbox" checked={view.lowPerformance}
-        onChange={event => store.set({ lowPerformance: event.target.checked }, true)} />降低动画与画布开销</label></div>
       <div className="dsh-fisher-setting-row"><button onClick={()=>store.dock("left")}>停靠左侧</button><button onClick={()=>store.dock("right")}>停靠右侧</button><button onClick={() => store.reset()}>窗口归位</button><button onClick={()=>store.resetLauncher()}>入口归位</button></div>
+      </>}
+      {section==='appearance'&&<><strong>纸面主题</strong><div className="dsh-fisher-settings-options">{([['system','跟随系统'],['light','暖纸浅色'],['dark','夜航深色']] as const).map(([theme,name])=><button key={theme} aria-pressed={view.theme===theme} onClick={()=>store.set({theme},true)}>{name}</button>)}</div>
+        <strong>文字大小</strong><div className="dsh-fisher-settings-options">{([14,16,18] as const).map((fontSize,index)=><button key={fontSize} aria-pressed={view.fontSize===fontSize} onClick={()=>store.set({fontSize},true)}>{['标准','舒适','大字'][index]}<small>{fontSize} px</small></button>)}</div>
+        <p className="dsh-fisher-setting-sample">留一点时间给风，也给自己。</p>
+        {toggle('减少动态效果','减少水流、摇摆和装饰动画',view.reducedMotion,()=>store.set({reducedMotion:!view.reducedMotion},true))}
+      </>}
+      {section==='playback'&&<>{toggle('播放轻声提示','咬钩与收获时播放轻声提醒',view.sound,()=>store.set({sound:!view.sound},true))}
+        <label className="dsh-fisher-volume">音量 <output>{Math.round(view.volume*100)}%</output><input aria-label="音量" type="range" min={0} max={100} step={5} value={Math.round(view.volume*100)} disabled={!view.sound} onChange={event=>store.set({volume:Number(event.target.value)/100},true)}/></label>
+        {toggle('节能模式','降低场景动画与画布开销',view.lowPerformance,()=>store.set({lowPerformance:!view.lowPerformance},true))}
+        <small>窗口收起时停止场景绘制；自动钓鱼仍按开关状态进行。</small>
+      </>}
+      </div>
     </section>;
   }
   return { Overlay, Settings };

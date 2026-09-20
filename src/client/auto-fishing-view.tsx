@@ -25,15 +25,18 @@ export function createAutoFishingView(React:typeof ReactTypes){
   const Help=createHelp(React),Dialog=createDialog(React),Pager=createPager(React),Icon=createCoastIcon(React),ActivitySwitch=createActivitySwitch(React);
   function Controls({data,controller,disabled,onHistory,compact=false}:Props&{onHistory:()=>void;compact?:boolean}){
     const enabled=data.autoFishing.enabled;
+    const [choosing,setChoosing]=React.useState(false);
     return <><ActivitySwitch title="自动钓鱼" description={enabled?'已开启 · 随 DSH 活动进行':'未开启 · 点一下，让海岸替你钓'} icon="auto" enabled={enabled} disabled={disabled} compact={compact} onChange={enabled=>void controller.action({type:'auto.enable',enabled})}>
       <Help label="自动钓鱼说明"><p>开启后，随 DSH 的模型响应和工具活动积累钓鱼时间。连续30秒没有新活动或等待确认时暂停；关掉海岸小窗仍可继续，退出 DSH 后保留进度。</p>
         <p>普通产物约需1分钟有效活动，越稀有越久，珠光、星砂和巨物还会延长。随心钓沿用所选落点，其他目标可选择落点；鱼饵不变。默认收好产物，攒壳币会出售符合条件的重复普通鱼；满包、缺饵时暂停。</p>
         <p>接管会关闭自动模式，保留同一份产物，并把已等待的比例转为收线进度，最后一段由你完成。只观察活动信号，不读取思考、聊天或工具正文。</p></Help>
     </ActivitySwitch>{!compact&&<section className="dsh-fisher-auto-plan" aria-label="托管目标">
       <div className="dsh-fisher-auto-section-heading"><strong>这次想钓什么</strong><Help label="托管目标说明"><p>{AUTO_GOAL_DETAILS[data.autoFishing.goal]}</p></Help></div>
-      <div className="dsh-fisher-auto-goals">{AUTO_GOALS.map(goal=><button key={goal} disabled={disabled} aria-pressed={data.autoFishing.goal===goal} onClick={()=>void controller.action({type:'auto.goal',goal})}>
+      <button className="dsh-fisher-selected-item" aria-label="更换托管目标" aria-haspopup="dialog" disabled={disabled} onClick={()=>setChoosing(true)}><Icon name={GOAL_CARDS[data.autoFishing.goal].icon}/><span><strong>{AUTO_GOAL_NAMES[data.autoFishing.goal]}</strong><small>{GOAL_CARDS[data.autoFishing.goal].summary}</small></span><span>更换 ›</span></button>
+      <p className="dsh-fisher-auto-goal-note">{GOAL_CARDS[data.autoFishing.goal].note}{data.active&&' 更换目标从下一竿生效。'}</p>
+      {choosing&&<Dialog title="选择托管目标" onClose={()=>setChoosing(false)} closeLabel="保持当前目标" busy={disabled} error={controller.getSnapshot().error} onRetry={()=>void controller.retry()}><div className="dsh-fisher-auto-goals">{AUTO_GOALS.map(goal=><button key={goal} disabled={disabled} aria-pressed={data.autoFishing.goal===goal} onClick={async()=>{await controller.action({type:'auto.goal',goal});if(!controller.getSnapshot().error)setChoosing(false);}}>
         <Icon name={GOAL_CARDS[goal].icon}/><span><strong>{AUTO_GOAL_NAMES[goal]}</strong><small>{GOAL_CARDS[goal].summary}</small></span><i aria-hidden="true">{data.autoFishing.goal===goal?'✓':''}</i>
-      </button>)}</div><p className="dsh-fisher-auto-goal-note">{GOAL_CARDS[data.autoFishing.goal].note}{data.active&&' 更换目标从下一竿生效。'}</p>
+      </button>)}</div><p className="dsh-fisher-auto-goal-note">{AUTO_GOAL_DETAILS[data.autoFishing.goal]}</p></Dialog>}
     </section>}{data.autoFishing.recent.length>0&&<button className="dsh-fisher-auto-history" disabled={disabled} onClick={onHistory}><Icon name="bag"/><span>查看自动收获</span><b>{data.autoFishing.caught>data.autoFishing.seen?`${data.autoFishing.caught-data.autoFishing.seen} 份新收获`:'最近记录'}</b><span aria-hidden="true">›</span></button>}</>;
   }
   function Progress({data,controller,disabled,onCancel,onHarbor}:Props&{onCancel:()=>void;onHarbor:()=>void}){
